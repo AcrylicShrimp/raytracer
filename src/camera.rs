@@ -104,6 +104,7 @@ fn trace_ray(ray: &Ray, scene: &Scene, depth: u32, ambient_light: Vec3A) -> Vec3
         }
     };
     let albedo = hit.material.albedo;
+    let metallic = hit.material.metallic;
     let roughness = hit.material.roughness;
 
     let mut diffuse = albedo * ambient_light;
@@ -116,7 +117,7 @@ fn trace_ray(ray: &Ray, scene: &Scene, depth: u32, ambient_light: Vec3A) -> Vec3
 
         if !is_obstacle_exist {
             let diffuse_strength = hit.normal.dot(-lit.direction).max(0f32);
-            diffuse += albedo * lit.contribution * diffuse_strength * roughness;
+            diffuse += albedo * lit.contribution * diffuse_strength;
         }
     }
 
@@ -125,11 +126,10 @@ fn trace_ray(ray: &Ray, scene: &Scene, depth: u32, ambient_light: Vec3A) -> Vec3
     if hit.material.is_reflective {
         let reflection_dir = ray.direction.reflect(hit.normal);
         let reflection_ray = Ray::new(hit.point + reflection_dir * 1e-4, reflection_dir);
-        reflection =
-            trace_ray(&reflection_ray, scene, depth - 1, ambient_light) * (1f32 - roughness);
+        reflection = trace_ray(&reflection_ray, scene, depth - 1, ambient_light);
     }
 
-    diffuse + reflection * albedo
+    (diffuse * roughness).lerp(reflection * albedo, metallic)
 }
 
 fn map_hdr_to_sdr(color: Vec3A, exposure: f32, gamma: f32) -> Vec3A {

@@ -30,6 +30,7 @@ fn main() {
         radius: 1.0,
         material: Material {
             albedo: Vec3A::new(1.0, 0.5, 0.1),
+            metallic: 0.5,
             roughness: 1.0,
             is_reflective: false,
         },
@@ -39,6 +40,7 @@ fn main() {
         radius: 0.75,
         material: Material {
             albedo: Vec3A::new(0.1, 0.35, 1.0),
+            metallic: 0.9,
             roughness: 0.1,
             is_reflective: true,
         },
