@@ -50,9 +50,9 @@ impl Camera {
         gamma: f32,
     ) -> Vec<u8> {
         let aspect_ratio = screen_width as f32 / screen_height as f32;
-        let mut frame_buffer = vec![Vec3A::ZERO; (screen_width * screen_height) as usize];
+        let mut hdr_buffer = vec![Vec3A::ZERO; (screen_width * screen_height) as usize];
 
-        frame_buffer
+        hdr_buffer
             .par_iter_mut()
             .enumerate()
             .for_each(|(index, pixel)| {
@@ -89,13 +89,13 @@ impl Camera {
                 *pixel = color;
             });
 
-        let mut scaled_frame_buffer = vec![0u8; (screen_width * screen_height * 4) as usize];
+        let mut frame_buffer = vec![0u8; (screen_width * screen_height * 4) as usize];
 
-        scaled_frame_buffer
+        frame_buffer
             .par_chunks_mut(4)
             .enumerate()
             .for_each(|(index, pixel)| {
-                let color = frame_buffer[index];
+                let color = hdr_buffer[index];
                 let color = (color * 255f32)
                     .clamp(Vec3A::ZERO, Vec3A::splat(255f32))
                     .round();
@@ -105,7 +105,7 @@ impl Camera {
                 pixel[3] = 255;
             });
 
-        scaled_frame_buffer
+        frame_buffer
     }
 }
 
