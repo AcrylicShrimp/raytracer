@@ -1,13 +1,18 @@
 mod aabb;
 mod camera;
 mod hit;
+mod light;
+mod lights;
 mod material;
 mod object;
 mod objects;
 mod ray;
 mod scene;
 
-use crate::{camera::Camera, material::Material, objects::sphere::Sphere, scene::Scene};
+use crate::{
+    camera::Camera, lights::directional_light::DirectionalLight, material::Material,
+    objects::sphere::Sphere, scene::Scene,
+};
 use glam::Vec3A;
 use std::{fs::File, io::BufWriter, path::Path};
 
@@ -17,13 +22,26 @@ fn main() {
     let screen_height = 480;
 
     let mut scene = Scene::new();
-    scene.add_object(Box::new(Sphere {
+    scene.add_object(Sphere {
         center: Vec3A::new(0.0, 0.0, 5.0),
         radius: 1.0,
         material: Material {
             albedo: Vec3A::new(1.0, 1.0, 0.5),
         },
-    }));
+    });
+    scene.add_object(Sphere {
+        center: Vec3A::new(1.0, 0.0, 2.0),
+        radius: 0.75,
+        material: Material {
+            albedo: Vec3A::new(0.5, 1.0, 1.0),
+        },
+    });
+
+    scene.add_light(DirectionalLight {
+        color: Vec3A::new(1.0, 1.0, 1.0),
+        intensity: 100.0,
+        direction: Vec3A::new(-1.0, -1.0, 0.5).normalize(),
+    });
 
     let camera = Camera::look_at(
         Vec3A::new(0.0, 0.0, 0.0),
@@ -31,7 +49,14 @@ fn main() {
         Vec3A::new(0.0, 1.0, 0.0),
         90.0,
     );
-    let frame_buffer = camera.render(&scene, screen_width, screen_height);
+    let frame_buffer = camera.render(
+        &scene,
+        screen_width,
+        screen_height,
+        Vec3A::ZERO,
+        1f32,
+        2.2f32,
+    );
 
     let file = File::create(path).unwrap();
     let w = BufWriter::new(file);

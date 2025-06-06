@@ -9,7 +9,7 @@ pub struct Aabb {
 
 impl Aabb {
     pub fn is_intersecting(&self, ray: &Ray) -> bool {
-        let mut t_min = 0.0f32;
+        let mut t_min = 0f32;
         let mut t_max = f32::INFINITY;
         let direction_inv = ray.direction.recip();
 

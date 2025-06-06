@@ -39,29 +39,67 @@ impl Camera {
         }
     }
 
-    pub fn render(&self, scene: &Scene, screen_width: u32, screen_height: u32) -> Vec<u8> {
+    pub fn render(
+        &self,
+        scene: &Scene,
+        screen_width: u32,
+        screen_height: u32,
+        ambient_light: Vec3A,
+        exposure: f32,
+        gamma: f32,
+    ) -> Vec<u8> {
         let aspect_ratio = screen_width as f32 / screen_height as f32;
-        let mut frame_buffer = vec![0; (screen_width * screen_height * 4) as usize];
+        let mut hdr_frame_buffer = vec![Vec3A::ZERO; (screen_width * screen_height) as usize];
 
         for y in 0..screen_height {
             for x in 0..screen_width {
-                let pixel_x = (x as f32 + 0.5) / screen_width as f32;
-                let pixel_y = (y as f32 + 0.5) / screen_height as f32;
-                let ray = self.cast_ray(aspect_ratio, pixel_x, pixel_y);
-                let hit = scene.hit(&ray, 0.0, f32::INFINITY);
-                let color = match hit {
-                    Some(hit) => hit.material.albedo,
-                    None => Vec3A::ZERO,
-                };
+                const SAMPLES: u32 = 64;
+                let mut sum = Vec3A::ZERO;
 
-                let pixel_index = ((y * screen_width + x) * 4) as usize;
-                frame_buffer[pixel_index] = (color.x * 255.0) as u8;
-                frame_buffer[pixel_index + 1] = (color.y * 255.0) as u8;
-                frame_buffer[pixel_index + 2] = (color.z * 255.0) as u8;
-                frame_buffer[pixel_index + 3] = 255;
+                for _ in 0..SAMPLES {
+                    let pixel_x = (x as f32 + rand::random::<f32>()) / screen_width as f32;
+                    let pixel_y = (y as f32 + rand::random::<f32>()) / screen_height as f32;
+                    let ray = self.cast_ray(aspect_ratio, pixel_x, pixel_y);
+                    let hit = scene.hit(&ray, 1e-3, f32::INFINITY);
+                    let hit = match hit {
+                        Some(hit) if hit.front_face => hit,
+                        _ => {
+                            sum += Vec3A::ZERO;
+                            continue;
+                        }
+                    };
+
+                    let mut final_energy = hit.material.albedo * ambient_light;
+
+                    for light in scene.lights() {
+                        let contribution = light.sample(&hit);
+                        final_energy += hit.material.albedo * contribution;
+                    }
+
+                    sum += final_energy;
+                }
+
+                let color = sum / SAMPLES as f32;
+                hdr_frame_buffer[(y * screen_width + x) as usize] = color;
             }
         }
 
-        frame_buffer
+        let mut sdr_frame_buffer = vec![0u8; (screen_width * screen_height * 4) as usize];
+
+        for index in 0..hdr_frame_buffer.len() {
+            let color = hdr_frame_buffer[index];
+            let color = color * exposure;
+            let color = color / (color + Vec3A::splat(1f32));
+            let color = color.powf(1f32 / gamma);
+            let color = (color * Vec3A::splat(255f32))
+                .clamp(Vec3A::ZERO, Vec3A::splat(255f32))
+                .round();
+            sdr_frame_buffer[index * 4] = color.x as u8;
+            sdr_frame_buffer[index * 4 + 1] = color.y as u8;
+            sdr_frame_buffer[index * 4 + 2] = color.z as u8;
+            sdr_frame_buffer[index * 4 + 3] = 255;
+        }
+
+        sdr_frame_buffer
     }
 }
