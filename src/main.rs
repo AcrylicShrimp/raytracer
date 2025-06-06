@@ -39,7 +39,7 @@ fn main() {
 
     scene.add_light(DirectionalLight {
         color: Vec3A::new(1.0, 1.0, 1.0),
-        intensity: 100.0,
+        intensity: 5f32,
         direction: Vec3A::new(-1.0, -1.0, 0.5).normalize(),
     });
 

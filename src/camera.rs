@@ -1,5 +1,6 @@
 use crate::{ray::Ray, scene::Scene};
 use glam::Vec3A;
+use rayon::prelude::*;
 
 #[derive(Debug, Clone)]
 pub struct Camera {
@@ -51,8 +52,13 @@ impl Camera {
         let aspect_ratio = screen_width as f32 / screen_height as f32;
         let mut hdr_frame_buffer = vec![Vec3A::ZERO; (screen_width * screen_height) as usize];
 
-        for y in 0..screen_height {
-            for x in 0..screen_width {
+        hdr_frame_buffer
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(index, pixel)| {
+                let x = index % screen_width as usize;
+                let y = index / screen_width as usize;
+
                 const SAMPLES: u32 = 64;
                 let mut sum = Vec3A::ZERO;
 
@@ -80,25 +86,27 @@ impl Camera {
                 }
 
                 let color = sum / SAMPLES as f32;
-                hdr_frame_buffer[(y * screen_width + x) as usize] = color;
-            }
-        }
+                *pixel = color;
+            });
 
         let mut sdr_frame_buffer = vec![0u8; (screen_width * screen_height * 4) as usize];
 
-        for index in 0..hdr_frame_buffer.len() {
-            let color = hdr_frame_buffer[index];
-            let color = color * exposure;
-            let color = color / (color + Vec3A::splat(1f32));
-            let color = color.powf(1f32 / gamma);
-            let color = (color * Vec3A::splat(255f32))
-                .clamp(Vec3A::ZERO, Vec3A::splat(255f32))
-                .round();
-            sdr_frame_buffer[index * 4] = color.x as u8;
-            sdr_frame_buffer[index * 4 + 1] = color.y as u8;
-            sdr_frame_buffer[index * 4 + 2] = color.z as u8;
-            sdr_frame_buffer[index * 4 + 3] = 255;
-        }
+        sdr_frame_buffer
+            .par_chunks_mut(4)
+            .enumerate()
+            .for_each(|(index, pixel)| {
+                let color = hdr_frame_buffer[index];
+                let color = color * exposure;
+                let color = color / (color + 1f32);
+                let color = color.powf(1f32 / gamma);
+                let color = (color * 255f32)
+                    .clamp(Vec3A::ZERO, Vec3A::splat(255f32))
+                    .round();
+                pixel[0] = color.x as u8;
+                pixel[1] = color.y as u8;
+                pixel[2] = color.z as u8;
+                pixel[3] = 255;
+            });
 
         sdr_frame_buffer
     }
