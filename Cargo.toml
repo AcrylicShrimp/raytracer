@@ -3,4 +3,10 @@ name = "raytracer"
 version = "0.1.0"
 edition = "2024"
 
+[workspace.dependencies]
+glam = { version = "0.30", features = ["fast-math"] }
+png = "0.17"
+
 [dependencies]
+glam.workspace = true
+png.workspace = true
