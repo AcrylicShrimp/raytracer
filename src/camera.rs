@@ -13,8 +13,8 @@ pub struct Camera {
 impl Camera {
     pub fn look_at(position: Vec3A, target: Vec3A, up: Vec3A, fov: f32) -> Self {
         let direction = (target - position).normalize();
-        let right = up.cross(direction).normalize();
-        let up = direction.cross(right).normalize();
+        let right = direction.cross(up).normalize();
+        let up = right.cross(direction).normalize();
 
         Self {
             position,
@@ -32,12 +32,9 @@ impl Camera {
         let pixel_y = (pixel_y * 2.0 - 1.0) * f;
 
         let right = self.direction.cross(self.up).normalize();
-        let direction = self.direction + self.up * pixel_y + right * pixel_x;
+        let direction = self.direction - self.up * pixel_y + right * pixel_x;
 
-        Ray {
-            origin: self.position,
-            direction,
-        }
+        Ray::new(self.position, direction)
     }
 
     pub fn render(
@@ -78,8 +75,17 @@ impl Camera {
                     let mut final_energy = hit.material.albedo * ambient_light;
 
                     for light in scene.lights() {
-                        let contribution = light.sample(&hit);
-                        final_energy += hit.material.albedo * contribution;
+                        let lit = light.sample(hit.point);
+                        let shadow_ray_origin = hit.point + hit.normal * 1e-3;
+                        let shadow_ray = Ray::new(shadow_ray_origin, -lit.direction);
+                        let is_obstacle_exist =
+                            scene.hit(&shadow_ray, 1e-3, lit.distance).is_some();
+
+                        if !is_obstacle_exist {
+                            let diffuse_strength = hit.normal.dot(-lit.direction).max(0f32);
+                            let diffuse = hit.material.albedo * lit.contribution * diffuse_strength;
+                            final_energy += diffuse;
+                        }
                     }
 
                     sdr_sum += map_hdr_to_sdr(final_energy, exposure, gamma);

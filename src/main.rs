@@ -26,34 +26,34 @@ fn main() {
 
     let mut scene = Scene::new();
     scene.add_object(Sphere {
-        center: Vec3A::new(0.0, 0.0, 5.0),
+        center: Vec3A::new(1.0, 0.0, -5.0),
         radius: 1.0,
         material: Material {
-            albedo: Vec3A::new(1.0, 1.0, 0.5),
+            albedo: Vec3A::new(1.0, 0.5, 0.1),
         },
     });
     scene.add_object(Sphere {
-        center: Vec3A::new(1.0, 0.0, 2.0),
+        center: Vec3A::new(-1.0, 0.0, -5.0),
         radius: 0.75,
         material: Material {
-            albedo: Vec3A::new(0.5, 1.0, 1.0),
+            albedo: Vec3A::new(0.1, 0.35, 1.0),
         },
     });
 
     scene.add_light(DirectionalLight {
         color: Vec3A::new(1.0, 1.0, 1.0),
         intensity: 5f32,
-        direction: Vec3A::new(-1.0, -1.0, 0.5).normalize(),
+        direction: Vec3A::new(-2.0, -1.0, 0.0).normalize(),
     });
     scene.add_light(SpotLight {
         color: Vec3A::new(1.0, 1.0, 1.0),
-        intensity: 2f32,
-        position: Vec3A::new(0.0, 5.0, 5.0),
+        intensity: 1f32,
+        position: Vec3A::new(0.0, -2.0, -5.0),
     });
 
     let camera = Camera::look_at(
-        Vec3A::new(0.0, 0.0, 0.0),
-        Vec3A::new(0.0, 0.0, 1.0),
+        Vec3A::new(0.0, 0.0, -2.0),
+        Vec3A::new(0.0, 0.0, -5.0),
         Vec3A::new(0.0, 1.0, 0.0),
         90.0,
     );

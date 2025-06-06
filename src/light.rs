@@ -1,6 +1,6 @@
-use crate::hit::HitRecord;
+use crate::hit::LitRecord;
 use glam::Vec3A;
 
 pub trait Light: Send + Sync {
-    fn sample(&self, hit: &HitRecord) -> Vec3A;
+    fn sample(&self, position: Vec3A) -> LitRecord;
 }

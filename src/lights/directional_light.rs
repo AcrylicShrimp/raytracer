@@ -1,4 +1,4 @@
-use crate::{hit::HitRecord, light::Light};
+use crate::{hit::LitRecord, light::Light};
 use glam::Vec3A;
 
 #[derive(Debug, Clone)]
@@ -9,14 +9,11 @@ pub struct DirectionalLight {
 }
 
 impl Light for DirectionalLight {
-    fn sample(&self, hit: &HitRecord) -> Vec3A {
-        let light_direction = self.direction.normalize();
-        let light_intensity = self.intensity;
-        let light_color = self.color;
-
-        let dot_product = (-light_direction).dot(hit.normal).max(0f32);
-        let intensity = light_intensity * dot_product;
-
-        light_color * intensity
+    fn sample(&self, _position: Vec3A) -> LitRecord {
+        LitRecord {
+            contribution: self.color * self.intensity,
+            direction: self.direction.normalize(),
+            distance: f32::INFINITY,
+        }
     }
 }

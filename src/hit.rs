@@ -37,3 +37,10 @@ impl HitRecord {
         }
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct LitRecord {
+    pub contribution: Vec3A,
+    pub direction: Vec3A,
+    pub distance: f32,
+}

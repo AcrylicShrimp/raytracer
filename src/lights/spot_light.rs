@@ -1,4 +1,4 @@
-use crate::{hit::HitRecord, light::Light};
+use crate::{hit::LitRecord, light::Light};
 use glam::Vec3A;
 
 #[derive(Debug, Clone)]
@@ -9,18 +9,21 @@ pub struct SpotLight {
 }
 
 impl Light for SpotLight {
-    fn sample(&self, hit: &HitRecord) -> Vec3A {
-        if self.position.distance_squared(hit.point) <= 1e-3 {
-            return self.color * self.intensity;
+    fn sample(&self, position: Vec3A) -> LitRecord {
+        let distance = self.position.distance(position);
+
+        if distance <= 1e-3 {
+            return LitRecord {
+                contribution: self.color * self.intensity,
+                direction: Vec3A::ONE,
+                distance,
+            };
         }
 
-        let light_direction = (self.position - hit.point).normalize();
-        let light_intensity = self.intensity;
-        let light_color = self.color;
-
-        let dot_product = (-light_direction).dot(hit.normal).max(0f32);
-        let intensity = light_intensity * dot_product;
-
-        light_color * intensity
+        LitRecord {
+            contribution: self.color * self.intensity * (1f32 + distance).powf(2.0).recip(),
+            direction: (position - self.position).normalize(),
+            distance,
+        }
     }
 }

@@ -45,7 +45,7 @@ impl Object for Sphere {
         }
 
         let point = ray.origin + ray.direction * t;
-        let outward_normal = (point - self.center) / self.radius;
+        let outward_normal = (point - self.center).normalize();
 
         // Create hit record with the proper normal orientation
         let hit_record = HitRecord::new(
