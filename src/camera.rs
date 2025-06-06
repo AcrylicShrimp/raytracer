@@ -50,17 +50,17 @@ impl Camera {
         gamma: f32,
     ) -> Vec<u8> {
         let aspect_ratio = screen_width as f32 / screen_height as f32;
-        let mut hdr_frame_buffer = vec![Vec3A::ZERO; (screen_width * screen_height) as usize];
+        let mut frame_buffer = vec![Vec3A::ZERO; (screen_width * screen_height) as usize];
 
-        hdr_frame_buffer
+        frame_buffer
             .par_iter_mut()
             .enumerate()
             .for_each(|(index, pixel)| {
                 let x = index % screen_width as usize;
                 let y = index / screen_width as usize;
 
-                const SAMPLES: u32 = 64;
-                let mut sum = Vec3A::ZERO;
+                const SAMPLES: u32 = 128;
+                let mut sdr_sum = Vec3A::ZERO;
 
                 for _ in 0..SAMPLES {
                     let pixel_x = (x as f32 + rand::random::<f32>()) / screen_width as f32;
@@ -70,7 +70,7 @@ impl Camera {
                     let hit = match hit {
                         Some(hit) if hit.front_face => hit,
                         _ => {
-                            sum += Vec3A::ZERO;
+                            sdr_sum += Vec3A::ZERO;
                             continue;
                         }
                     };
@@ -82,23 +82,20 @@ impl Camera {
                         final_energy += hit.material.albedo * contribution;
                     }
 
-                    sum += final_energy;
+                    sdr_sum += map_hdr_to_sdr(final_energy, exposure, gamma);
                 }
 
-                let color = sum / SAMPLES as f32;
+                let color = sdr_sum / SAMPLES as f32;
                 *pixel = color;
             });
 
-        let mut sdr_frame_buffer = vec![0u8; (screen_width * screen_height * 4) as usize];
+        let mut scaled_frame_buffer = vec![0u8; (screen_width * screen_height * 4) as usize];
 
-        sdr_frame_buffer
+        scaled_frame_buffer
             .par_chunks_mut(4)
             .enumerate()
             .for_each(|(index, pixel)| {
-                let color = hdr_frame_buffer[index];
-                let color = color * exposure;
-                let color = color / (color + 1f32);
-                let color = color.powf(1f32 / gamma);
+                let color = frame_buffer[index];
                 let color = (color * 255f32)
                     .clamp(Vec3A::ZERO, Vec3A::splat(255f32))
                     .round();
@@ -108,6 +105,12 @@ impl Camera {
                 pixel[3] = 255;
             });
 
-        sdr_frame_buffer
+        scaled_frame_buffer
     }
+}
+
+fn map_hdr_to_sdr(color: Vec3A, exposure: f32, gamma: f32) -> Vec3A {
+    let color = color * exposure;
+    let color = color / (color + 1f32);
+    color.powf(1f32 / gamma)
 }
