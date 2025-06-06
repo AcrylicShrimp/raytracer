@@ -30,6 +30,8 @@ fn main() {
         radius: 1.0,
         material: Material {
             albedo: Vec3A::new(1.0, 0.5, 0.1),
+            roughness: 1.0,
+            is_reflective: false,
         },
     });
     scene.add_object(Sphere {
@@ -37,6 +39,8 @@ fn main() {
         radius: 0.75,
         material: Material {
             albedo: Vec3A::new(0.1, 0.35, 1.0),
+            roughness: 0.1,
+            is_reflective: true,
         },
     });
 

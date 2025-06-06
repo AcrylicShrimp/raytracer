@@ -63,32 +63,8 @@ impl Camera {
                     let pixel_x = (x as f32 + rand::random::<f32>()) / screen_width as f32;
                     let pixel_y = (y as f32 + rand::random::<f32>()) / screen_height as f32;
                     let ray = self.cast_ray(aspect_ratio, pixel_x, pixel_y);
-                    let hit = scene.hit(&ray, 1e-3, f32::INFINITY);
-                    let hit = match hit {
-                        Some(hit) if hit.front_face => hit,
-                        _ => {
-                            sdr_sum += Vec3A::ZERO;
-                            continue;
-                        }
-                    };
-
-                    let mut final_energy = hit.material.albedo * ambient_light;
-
-                    for light in scene.lights() {
-                        let lit = light.sample(hit.point);
-                        let shadow_ray_origin = hit.point + hit.normal * 1e-3;
-                        let shadow_ray = Ray::new(shadow_ray_origin, -lit.direction);
-                        let is_obstacle_exist =
-                            scene.hit(&shadow_ray, 1e-3, lit.distance).is_some();
-
-                        if !is_obstacle_exist {
-                            let diffuse_strength = hit.normal.dot(-lit.direction).max(0f32);
-                            let diffuse = hit.material.albedo * lit.contribution * diffuse_strength;
-                            final_energy += diffuse;
-                        }
-                    }
-
-                    sdr_sum += map_hdr_to_sdr(final_energy, exposure, gamma);
+                    let energy = trace_ray(&ray, scene, 32, ambient_light);
+                    sdr_sum += map_hdr_to_sdr(energy, exposure, gamma);
                 }
 
                 let color = sdr_sum / SAMPLES as f32;
@@ -113,6 +89,47 @@ impl Camera {
 
         frame_buffer
     }
+}
+
+fn trace_ray(ray: &Ray, scene: &Scene, depth: u32, ambient_light: Vec3A) -> Vec3A {
+    if depth == 0 {
+        return Vec3A::ZERO;
+    }
+
+    let hit = scene.hit(ray, 1e-3, f32::INFINITY);
+    let hit = match hit {
+        Some(hit) if hit.front_face => hit,
+        _ => {
+            return Vec3A::ZERO;
+        }
+    };
+    let albedo = hit.material.albedo;
+    let roughness = hit.material.roughness;
+
+    let mut diffuse = albedo * ambient_light;
+
+    for light in scene.lights() {
+        let lit = light.sample(hit.point);
+        let shadow_ray_origin = hit.point + hit.normal * 1e-3;
+        let shadow_ray = Ray::new(shadow_ray_origin, -lit.direction);
+        let is_obstacle_exist = scene.hit(&shadow_ray, 1e-3, lit.distance).is_some();
+
+        if !is_obstacle_exist {
+            let diffuse_strength = hit.normal.dot(-lit.direction).max(0f32);
+            diffuse += albedo * lit.contribution * diffuse_strength * roughness;
+        }
+    }
+
+    let mut reflection = Vec3A::ZERO;
+
+    if hit.material.is_reflective {
+        let reflection_dir = ray.direction.reflect(hit.normal);
+        let reflection_ray = Ray::new(hit.point + reflection_dir * 1e-4, reflection_dir);
+        reflection =
+            trace_ray(&reflection_ray, scene, depth - 1, ambient_light) * (1f32 - roughness);
+    }
+
+    diffuse + reflection * albedo
 }
 
 fn map_hdr_to_sdr(color: Vec3A, exposure: f32, gamma: f32) -> Vec3A {
