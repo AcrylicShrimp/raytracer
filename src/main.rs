@@ -10,8 +10,11 @@ mod ray;
 mod scene;
 
 use crate::{
-    camera::Camera, lights::directional_light::DirectionalLight, material::Material,
-    objects::sphere::Sphere, scene::Scene,
+    camera::Camera,
+    lights::{directional_light::DirectionalLight, spot_light::SpotLight},
+    material::Material,
+    objects::sphere::Sphere,
+    scene::Scene,
 };
 use glam::Vec3A;
 use std::{fs::File, io::BufWriter, path::Path};
@@ -41,6 +44,11 @@ fn main() {
         color: Vec3A::new(1.0, 1.0, 1.0),
         intensity: 5f32,
         direction: Vec3A::new(-1.0, -1.0, 0.5).normalize(),
+    });
+    scene.add_light(SpotLight {
+        color: Vec3A::new(1.0, 1.0, 1.0),
+        intensity: 2f32,
+        position: Vec3A::new(0.0, 5.0, 5.0),
     });
 
     let camera = Camera::look_at(
