@@ -9,65 +9,97 @@ mod objects;
 mod ray;
 mod scene;
 
-use crate::{
-    camera::Camera,
-    lights::{directional_light::DirectionalLight, spot_light::SpotLight},
-    material::Material,
-    objects::sphere::Sphere,
-    scene::Scene,
-};
-use glam::Vec3A;
+use crate::{camera::Camera, material::Material, objects::r#box::Box, scene::Scene};
+use glam::{Quat, Vec3A};
 use std::{fs::File, io::BufWriter, path::Path};
+
+const MATERIAL_WHITE: Material = Material {
+    albedo: Vec3A::ONE,
+    metallic: 0.5,
+    roughness: 1.0,
+    is_reflective: false,
+};
+const MATERIAL_RED: Material = Material {
+    albedo: Vec3A::new(1.0, 0.0, 0.0),
+    metallic: 0.5,
+    roughness: 1.0,
+    is_reflective: false,
+};
+const MATERIAL_GREEN: Material = Material {
+    albedo: Vec3A::new(0.0, 1.0, 0.0),
+    metallic: 0.5,
+    roughness: 1.0,
+    is_reflective: false,
+};
+const MATERIAL_LIGHT: Material = Material {
+    albedo: Vec3A::new(1.0, 0.8, 0.6),
+    metallic: 0.5,
+    roughness: 1.0,
+    is_reflective: false,
+};
+const BOX_SIZE: f32 = 2.5;
+const BOX_THICKNESS: f32 = 0.1;
+const BOX_OFFSET: f32 = (BOX_SIZE + BOX_THICKNESS) * 0.5;
+const LIGHT_SIZE: f32 = 0.5;
+const LIGHT_THICKNESS: f32 = 0.05;
 
 fn main() {
     let path = Path::new(r"image.png");
     let screen_width = 640;
     let screen_height = 480;
 
+    // Cornell Box
     let mut scene = Scene::new();
-    scene.add_object(Sphere {
-        center: Vec3A::new(1.0, 0.0, -5.0),
-        radius: 1.0,
-        material: Material {
-            albedo: Vec3A::new(1.0, 0.5, 0.1),
-            metallic: 0.5,
-            roughness: 1.0,
-            is_reflective: false,
-        },
+    scene.add_object(Box {
+        center: Vec3A::new(0.0, -BOX_OFFSET, 0.0),
+        size: Vec3A::new(BOX_SIZE, BOX_THICKNESS, BOX_SIZE),
+        rotation: Quat::IDENTITY,
+        material: MATERIAL_WHITE.clone(),
     });
-    scene.add_object(Sphere {
-        center: Vec3A::new(-1.0, 0.0, -5.0),
-        radius: 0.75,
-        material: Material {
-            albedo: Vec3A::new(0.1, 0.35, 1.0),
-            metallic: 0.9,
-            roughness: 0.1,
-            is_reflective: true,
-        },
+    scene.add_object(Box {
+        center: Vec3A::new(0.0, 0.0, -BOX_OFFSET),
+        size: Vec3A::new(BOX_SIZE, BOX_SIZE, BOX_THICKNESS),
+        rotation: Quat::IDENTITY,
+        material: MATERIAL_WHITE.clone(),
+    });
+    scene.add_object(Box {
+        center: Vec3A::new(0.0, BOX_OFFSET, 0.0),
+        size: Vec3A::new(BOX_SIZE, BOX_THICKNESS, BOX_SIZE),
+        rotation: Quat::IDENTITY,
+        material: MATERIAL_WHITE.clone(),
     });
 
-    scene.add_light(DirectionalLight {
-        color: Vec3A::new(1.0, 1.0, 1.0),
-        intensity: 5f32,
-        direction: Vec3A::new(-2.0, -1.0, 0.0).normalize(),
+    scene.add_object(Box {
+        center: Vec3A::new(-BOX_OFFSET, 0.0, 0.0),
+        size: Vec3A::new(BOX_THICKNESS, BOX_SIZE, BOX_SIZE),
+        rotation: Quat::IDENTITY,
+        material: MATERIAL_RED.clone(),
     });
-    scene.add_light(SpotLight {
-        color: Vec3A::new(1.0, 1.0, 1.0),
-        intensity: 1f32,
-        position: Vec3A::new(0.0, -2.0, -5.0),
+    scene.add_object(Box {
+        center: Vec3A::new(BOX_OFFSET, 0.0, 0.0),
+        size: Vec3A::new(BOX_THICKNESS, BOX_SIZE, BOX_SIZE),
+        rotation: Quat::IDENTITY,
+        material: MATERIAL_GREEN.clone(),
+    });
+
+    scene.add_object(Box {
+        center: Vec3A::new(0.0, BOX_OFFSET - LIGHT_THICKNESS * 0.5, 0.0),
+        size: Vec3A::new(LIGHT_SIZE, LIGHT_SIZE, LIGHT_THICKNESS),
+        rotation: Quat::IDENTITY,
+        material: MATERIAL_LIGHT.clone(),
     });
 
     let camera = Camera::look_at(
-        Vec3A::new(0.0, 0.0, -2.0),
-        Vec3A::new(0.0, 0.0, -5.0),
+        Vec3A::new(0.0, 0.0, 3.25),
+        Vec3A::new(0.0, 0.0, 0.0),
         Vec3A::new(0.0, 1.0, 0.0),
-        90.0,
+        120.0,
     );
     let frame_buffer = camera.render(
         &scene,
         screen_width,
         screen_height,
-        Vec3A::ZERO,
+        Vec3A::ONE,
         1f32,
         2.2f32,
     );
