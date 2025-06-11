@@ -1,5 +1,5 @@
 use crate::{ray::Ray, scene::Scene};
-use glam::Vec3A;
+use glam::{Mat3A, Vec3A};
 use rayon::prelude::*;
 
 #[derive(Debug, Clone)]
@@ -136,4 +136,13 @@ fn map_hdr_to_sdr(color: Vec3A, exposure: f32, gamma: f32) -> Vec3A {
     let color = color * exposure;
     let color = color / (color + 1f32);
     color.powf(1f32 / gamma)
+}
+
+fn diffuse_term() {}
+
+/// Smith's Schlick-GGX
+fn geometry_term(normal: Vec3A, view: Vec3A, roughness: f32) -> f32 {
+    let nv = normal.dot(view);
+
+    nv / (nv * (1.0 - roughness) + roughness)
 }

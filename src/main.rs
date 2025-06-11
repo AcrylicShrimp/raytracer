@@ -1,4 +1,6 @@
 mod aabb;
+mod brdf;
+mod brdfs;
 mod camera;
 mod hit;
 mod light;
