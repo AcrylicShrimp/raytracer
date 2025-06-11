@@ -47,7 +47,7 @@ const MATERIAL_RED: Material = Material {
     sheen: 0.0,
     sheen_tint: Vec3A::ZERO,
     clearcoat: 1.0,
-    clearcoat_gloss: 0.9,
+    clearcoat_gloss: 1.0,
 };
 const MATERIAL_GREEN: Material = Material {
     is_emissive: false,
@@ -62,11 +62,11 @@ const MATERIAL_GREEN: Material = Material {
     sheen: 0.0,
     sheen_tint: Vec3A::ZERO,
     clearcoat: 1.0,
-    clearcoat_gloss: 0.9,
+    clearcoat_gloss: 1.0,
 };
 const MATERIAL_LIGHT: Material = Material {
     is_emissive: true,
-    emission: Vec3A::new(30.0, 30.0, 30.0),
+    emission: Vec3A::new(10.0, 10.0, 10.0),
     albedo: Vec3A::ZERO,
     subsurface: 0.0,
     metallic: 0.0,
@@ -192,7 +192,7 @@ fn main() {
             screen_width,
             screen_height,
             sample_per_pixel: 4096 * 16,
-            max_ray_bounces: 8,
+            max_ray_bounces: 16,
             exposure: 1.0,
             gamma: 2.2,
         },
