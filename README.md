@@ -13,6 +13,7 @@ This is a simple raytracer written in Rust.
 
 - [ ] fix clearcoat
 - [ ] apply specular tint
+- [ ] implement NEE and MIT
 - [ ] implement subsurface
 - [ ] implement sheer
 - [ ] implement anisotropic
