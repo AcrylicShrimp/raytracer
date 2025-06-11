@@ -2,4 +2,4 @@
 
 This is a simple raytracer written in Rust.
 
-![result-1](./docs/image-1.png)
+![result-1](./docs/result-1.png)
