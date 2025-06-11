@@ -3,47 +3,123 @@ mod brdf;
 mod brdfs;
 mod camera;
 mod hit;
-mod light;
-mod lights;
 mod material;
 mod object;
 mod objects;
 mod ray;
 mod scene;
 
-use crate::{camera::Camera, material::Material, objects::r#box::Box, scene::Scene};
+use crate::{
+    brdfs::lambertian::LambertianBrdf,
+    camera::{Camera, RenderOptions},
+    material::Material,
+    objects::r#box::Box,
+    scene::Scene,
+};
 use glam::{Quat, Vec3A};
 use std::{fs::File, io::BufWriter, path::Path};
 
 const MATERIAL_WHITE: Material = Material {
-    albedo: Vec3A::ONE,
-    metallic: 0.5,
-    roughness: 1.0,
     is_reflective: false,
+    is_emissive: false,
+    emission: Vec3A::ZERO,
+    albedo: Vec3A::ONE,
+    subsurface: 0.0,
+    metallic: 0.5,
+    specular: 0.0,
+    specular_tint: Vec3A::ZERO,
+    roughness: 1.0,
+    anisotropic: 0.0,
+    sheen: 0.0,
+    sheen_tint: Vec3A::ZERO,
+    clearcoat: 0.0,
+    clearcoat_gloss: 0.0,
 };
 const MATERIAL_RED: Material = Material {
-    albedo: Vec3A::new(1.0, 0.0, 0.0),
-    metallic: 0.5,
-    roughness: 1.0,
     is_reflective: false,
+    is_emissive: false,
+    emission: Vec3A::ZERO,
+    albedo: Vec3A::new(1.0, 0.0, 0.0),
+    subsurface: 0.0,
+    metallic: 0.5,
+    specular: 0.0,
+    specular_tint: Vec3A::ZERO,
+    roughness: 1.0,
+    anisotropic: 0.0,
+    sheen: 0.0,
+    sheen_tint: Vec3A::ZERO,
+    clearcoat: 0.0,
+    clearcoat_gloss: 0.0,
 };
 const MATERIAL_GREEN: Material = Material {
-    albedo: Vec3A::new(0.0, 1.0, 0.0),
-    metallic: 0.5,
-    roughness: 1.0,
     is_reflective: false,
+    is_emissive: false,
+    emission: Vec3A::ZERO,
+    albedo: Vec3A::new(0.0, 1.0, 0.0),
+    subsurface: 0.0,
+    metallic: 0.5,
+    specular: 0.0,
+    specular_tint: Vec3A::ZERO,
+    roughness: 1.0,
+    anisotropic: 0.0,
+    sheen: 0.0,
+    sheen_tint: Vec3A::ZERO,
+    clearcoat: 0.0,
+    clearcoat_gloss: 0.0,
 };
 const MATERIAL_LIGHT: Material = Material {
-    albedo: Vec3A::new(1.0, 0.8, 0.6),
-    metallic: 0.5,
-    roughness: 1.0,
     is_reflective: false,
+    is_emissive: true,
+    emission: Vec3A::new(10.0, 10.0, 10.0),
+    albedo: Vec3A::ZERO,
+    subsurface: 0.0,
+    metallic: 0.5,
+    specular: 0.0,
+    specular_tint: Vec3A::ZERO,
+    roughness: 1.0,
+    anisotropic: 0.0,
+    sheen: 0.0,
+    sheen_tint: Vec3A::ZERO,
+    clearcoat: 0.0,
+    clearcoat_gloss: 0.0,
+};
+const MATERIAL_BOX_1: Material = Material {
+    is_reflective: false,
+    is_emissive: false,
+    emission: Vec3A::ZERO,
+    albedo: Vec3A::new(1.0, 1.0, 1.0),
+    subsurface: 0.0,
+    metallic: 0.5,
+    specular: 0.0,
+    specular_tint: Vec3A::ZERO,
+    roughness: 1.0,
+    anisotropic: 0.0,
+    sheen: 0.0,
+    sheen_tint: Vec3A::ZERO,
+    clearcoat: 0.0,
+    clearcoat_gloss: 0.0,
+};
+const MATERIAL_BOX_2: Material = Material {
+    is_reflective: false,
+    is_emissive: false,
+    emission: Vec3A::ZERO,
+    albedo: Vec3A::new(1.0, 1.0, 1.0),
+    subsurface: 0.0,
+    metallic: 0.5,
+    specular: 0.0,
+    specular_tint: Vec3A::ZERO,
+    roughness: 1.0,
+    anisotropic: 0.0,
+    sheen: 0.0,
+    sheen_tint: Vec3A::ZERO,
+    clearcoat: 0.0,
+    clearcoat_gloss: 0.0,
 };
 const BOX_SIZE: f32 = 2.5;
 const BOX_THICKNESS: f32 = 0.1;
 const BOX_OFFSET: f32 = (BOX_SIZE + BOX_THICKNESS) * 0.5;
 const LIGHT_SIZE: f32 = 0.5;
-const LIGHT_THICKNESS: f32 = 0.05;
+const LIGHT_THICKNESS: f32 = 0.01;
 
 fn main() {
     let path = Path::new(r"image.png");
@@ -52,6 +128,8 @@ fn main() {
 
     // Cornell Box
     let mut scene = Scene::new();
+
+    // Walls
     scene.add_object(Box {
         center: Vec3A::new(0.0, -BOX_OFFSET, 0.0),
         size: Vec3A::new(BOX_SIZE, BOX_THICKNESS, BOX_SIZE),
@@ -71,6 +149,7 @@ fn main() {
         material: MATERIAL_WHITE.clone(),
     });
 
+    // Colored Walls
     scene.add_object(Box {
         center: Vec3A::new(-BOX_OFFSET, 0.0, 0.0),
         size: Vec3A::new(BOX_THICKNESS, BOX_SIZE, BOX_SIZE),
@@ -84,11 +163,26 @@ fn main() {
         material: MATERIAL_GREEN.clone(),
     });
 
+    // Light
     scene.add_object(Box {
         center: Vec3A::new(0.0, BOX_OFFSET - LIGHT_THICKNESS * 0.5, 0.0),
         size: Vec3A::new(LIGHT_SIZE, LIGHT_SIZE, LIGHT_THICKNESS),
         rotation: Quat::IDENTITY,
         material: MATERIAL_LIGHT.clone(),
+    });
+
+    // Two Boxes
+    scene.add_object(Box {
+        center: Vec3A::new(-0.35, -BOX_OFFSET + 0.8, -0.35),
+        size: Vec3A::new(0.8, 1.6, 0.8),
+        rotation: Quat::from_rotation_y(20.0f32.to_radians()),
+        material: MATERIAL_BOX_1.clone(),
+    });
+    scene.add_object(Box {
+        center: Vec3A::new(0.45, -BOX_OFFSET + 0.35, 0.35),
+        size: Vec3A::new(0.7, 0.7, 0.7),
+        rotation: Quat::from_rotation_y(-20.0f32.to_radians()),
+        material: MATERIAL_BOX_2.clone(),
     });
 
     let camera = Camera::look_at(
@@ -99,11 +193,15 @@ fn main() {
     );
     let frame_buffer = camera.render(
         &scene,
-        screen_width,
-        screen_height,
-        Vec3A::ONE,
-        1f32,
-        2.2f32,
+        &LambertianBrdf,
+        &RenderOptions {
+            screen_width,
+            screen_height,
+            sample_per_pixel: 4096,
+            max_ray_bounces: 32,
+            exposure: 1.0,
+            gamma: 2.2,
+        },
     );
 
     let file = File::create(path).unwrap();

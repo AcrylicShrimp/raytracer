@@ -1,5 +1,5 @@
-use crate::{ray::Ray, scene::Scene};
-use glam::{Mat3A, Vec3A};
+use crate::{brdf::Brdf, ray::Ray, scene::Scene};
+use glam::Vec3A;
 use rayon::prelude::*;
 
 #[derive(Debug, Clone)]
@@ -37,16 +37,15 @@ impl Camera {
         Ray::new(self.position, direction)
     }
 
-    pub fn render(
-        &self,
-        scene: &Scene,
-        screen_width: u32,
-        screen_height: u32,
-        ambient_light: Vec3A,
-        exposure: f32,
-        gamma: f32,
-    ) -> Vec<u8> {
+    pub fn render(&self, scene: &Scene, brdf: &impl Brdf, options: &RenderOptions) -> Vec<u8> {
+        let screen_width = options.screen_width;
+        let screen_height = options.screen_height;
         let aspect_ratio = screen_width as f32 / screen_height as f32;
+        let sample_per_pixel = options.sample_per_pixel;
+        let max_ray_bounces = options.max_ray_bounces;
+        let exposure = options.exposure;
+        let gamma = options.gamma;
+
         let mut hdr_buffer = vec![Vec3A::ZERO; (screen_width * screen_height) as usize];
 
         hdr_buffer
@@ -56,19 +55,18 @@ impl Camera {
                 let x = index % screen_width as usize;
                 let y = index / screen_width as usize;
 
-                const SAMPLES: u32 = 128;
-                let mut sdr_sum = Vec3A::ZERO;
+                let mut sum = Vec3A::ZERO;
 
-                for _ in 0..SAMPLES {
+                for _ in 0..sample_per_pixel {
                     let pixel_x = (x as f32 + rand::random::<f32>()) / screen_width as f32;
                     let pixel_y = (y as f32 + rand::random::<f32>()) / screen_height as f32;
                     let ray = self.cast_ray(aspect_ratio, pixel_x, pixel_y);
-                    let energy = trace_ray(&ray, scene, 32, ambient_light);
-                    sdr_sum += map_hdr_to_sdr(energy, exposure, gamma);
+                    let energy = trace_ray(&ray, scene, brdf, max_ray_bounces);
+                    sum += energy;
                 }
 
-                let color = sdr_sum / SAMPLES as f32;
-                *pixel = color;
+                let color = sum / sample_per_pixel as f32;
+                *pixel = map_hdr_to_sdr(color, exposure, gamma);
             });
 
         let mut frame_buffer = vec![0u8; (screen_width * screen_height * 4) as usize];
@@ -91,7 +89,36 @@ impl Camera {
     }
 }
 
-fn trace_ray(ray: &Ray, scene: &Scene, depth: u32, ambient_light: Vec3A) -> Vec3A {
+pub struct RenderOptions {
+    pub screen_width: u32,
+    pub screen_height: u32,
+    pub sample_per_pixel: u32,
+    pub max_ray_bounces: u32,
+    pub exposure: f32,
+    pub gamma: f32,
+}
+
+/// Solves the rendering equation for a given ray, using the BRDF:
+///
+/// `L_o = L_e + f_r * L_i * (N dot L) / pdf`
+///
+/// where:
+/// - `L_o` is the outgoing radiance
+/// - `L_e` is the emitted radiance
+/// - `f_r` is the BRDF
+/// - `L_i` is the incoming radiance
+/// - `N` is the surface normal
+/// - `L` is the light direction
+/// - `pdf` is the probability density function of the BRDF
+///
+/// The function returns the outgoing radiance `L_o`.
+///
+/// The function is recursive, and terminates when the depth limit is reached.
+///
+/// Note that the BRDF is responsible for computing `attenuation`, which represents:
+///
+/// `attenuation = f_r * cos_theta / pdf`
+fn trace_ray(ray: &Ray, scene: &Scene, brdf: &impl Brdf, depth: u32) -> Vec3A {
     if depth == 0 {
         return Vec3A::ZERO;
     }
@@ -103,46 +130,31 @@ fn trace_ray(ray: &Ray, scene: &Scene, depth: u32, ambient_light: Vec3A) -> Vec3
             return Vec3A::ZERO;
         }
     };
-    let albedo = hit.material.albedo;
-    let metallic = hit.material.metallic;
-    let roughness = hit.material.roughness;
 
-    let mut diffuse = albedo * ambient_light;
+    // L_o
+    let mut energy = Vec3A::ZERO;
 
-    for light in scene.lights() {
-        let lit = light.sample(hit.point);
-        let shadow_ray_origin = hit.point + hit.normal * 1e-3;
-        let shadow_ray = Ray::new(shadow_ray_origin, -lit.direction);
-        let is_obstacle_exist = scene.hit(&shadow_ray, 1e-3, lit.distance).is_some();
-
-        if !is_obstacle_exist {
-            let diffuse_strength = hit.normal.dot(-lit.direction).max(0f32);
-            diffuse += albedo * lit.contribution * diffuse_strength;
-        }
+    if hit.material.is_emissive {
+        // L_e
+        energy += hit.material.emission;
     }
 
-    let mut reflection = Vec3A::ZERO;
+    let brdf_sample = brdf.sample(-ray.direction, hit.normal, &hit.material);
+    let next_ray = Ray::new(hit.point + hit.normal * 1e-3, brdf_sample.direction);
+    let next_energy = trace_ray(&next_ray, scene, brdf, depth - 1);
 
-    if hit.material.is_reflective {
-        let reflection_dir = ray.direction.reflect(hit.normal);
-        let reflection_ray = Ray::new(hit.point + reflection_dir * 1e-4, reflection_dir);
-        reflection = trace_ray(&reflection_ray, scene, depth - 1, ambient_light);
-    }
+    // attenuation = f_r * cos_theta / pdf
+    // L_o * attenuation
+    energy += brdf_sample.attenuation * next_energy;
 
-    (diffuse * roughness).lerp(reflection * albedo, metallic)
+    // TODO: perform NEE (Next Event Estimation) and MIS (Multiple Importance Sampling) here to effectively handle direct lighting
+
+    // L_e + L_o * attenuation
+    energy
 }
 
 fn map_hdr_to_sdr(color: Vec3A, exposure: f32, gamma: f32) -> Vec3A {
     let color = color * exposure;
     let color = color / (color + 1f32);
     color.powf(1f32 / gamma)
-}
-
-fn diffuse_term() {}
-
-/// Smith's Schlick-GGX
-fn geometry_term(normal: Vec3A, view: Vec3A, roughness: f32) -> f32 {
-    let nv = normal.dot(view);
-
-    nv / (nv * (1.0 - roughness) + roughness)
 }

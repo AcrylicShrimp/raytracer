@@ -1,33 +1,21 @@
-use crate::{hit::HitRecord, light::Light, object::Object, ray::Ray};
+use crate::{hit::HitRecord, object::Object, ray::Ray};
 use std::f32;
 
 pub struct Scene {
     objects: Vec<Box<dyn Object>>,
-    lights: Vec<Box<dyn Light>>,
 }
 
 impl Scene {
     pub fn new() -> Self {
-        Self {
-            objects: vec![],
-            lights: vec![],
-        }
+        Self { objects: vec![] }
     }
 
     pub fn objects(&self) -> &[Box<dyn Object>] {
         &self.objects
     }
 
-    pub fn lights(&self) -> &[Box<dyn Light>] {
-        &self.lights
-    }
-
     pub fn add_object(&mut self, object: impl Object + 'static) {
         self.objects.push(Box::new(object));
-    }
-
-    pub fn add_light(&mut self, light: impl Light + 'static) {
-        self.lights.push(Box::new(light));
     }
 
     pub fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {

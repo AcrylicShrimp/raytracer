@@ -3,6 +3,8 @@ use glam::Vec3A;
 #[derive(Debug, Clone)]
 pub struct Material {
     pub is_reflective: bool,
+    pub is_emissive: bool,
+    pub emission: Vec3A,
     pub albedo: Vec3A,
     pub subsurface: f32,
     pub metallic: f32,
