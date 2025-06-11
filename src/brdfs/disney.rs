@@ -42,8 +42,7 @@ impl Brdf for Disney {
         let clearcoat_prob = material.clearcoat / (1.0 + material.clearcoat);
 
         if rand::random::<f32>() < clearcoat_prob {
-            let alpha = lerp(0.1, 0.001, material.clearcoat_gloss);
-            let half = gtr1_importance_sample(normal, alpha);
+            let half = gtr1_importance_sample(normal, material.clearcoat_gloss);
             let light = (-view).reflect(half);
 
             let l_dot_h = light.dot(half);
