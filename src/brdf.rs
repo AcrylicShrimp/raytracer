@@ -14,6 +14,10 @@ pub trait Brdf: Send + Sync {
     fn sample(&self, view: Vec3A, normal: Vec3A, material: &Material) -> BrdfSample;
 }
 
+pub fn lerp(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t
+}
+
 pub fn random_cosine_direction(normal: Vec3A) -> Vec3A {
     let r1 = rand::random::<f32>();
     let r2 = rand::random::<f32>();

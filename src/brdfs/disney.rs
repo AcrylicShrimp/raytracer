@@ -1,5 +1,5 @@
 use crate::{
-    brdf::{Brdf, BrdfSample, create_orthonormal_basis, random_cosine_direction},
+    brdf::{Brdf, BrdfSample, create_orthonormal_basis, lerp, random_cosine_direction},
     material::Material,
 };
 use glam::Vec3A;
@@ -39,23 +39,21 @@ impl Brdf for Disney {
     }
 
     fn sample(&self, view: Vec3A, normal: Vec3A, material: &Material) -> BrdfSample {
-        let half = ggx_importance_sample(normal, material.roughness);
-        let light = (-view).reflect(half);
-
-        let l_dot_h = light.dot(half);
-
-        let f0 = Vec3A::splat(0.04);
-        let f = fresnel_term(l_dot_h, f0);
-
-        let clearcoat_prob = f.max_element();
+        let clearcoat_prob = material.clearcoat / (1.0 + material.clearcoat);
 
         if rand::random::<f32>() < clearcoat_prob {
+            let alpha = lerp(0.1, 0.001, material.clearcoat_gloss);
+            let half = ggx_importance_sample(normal, alpha);
+            let light = (-view).reflect(half);
+
+            let l_dot_h = light.dot(half);
             let n_dot_h = normal.dot(half);
             let n_dot_l = normal.dot(light);
             let n_dot_v = normal.dot(view);
             let v_dot_h = view.dot(half);
 
-            let pdf = ggx_pdf(n_dot_h, v_dot_h, 0.25) * clearcoat_prob;
+            let pdf =
+                ggx_pdf_clearcoat(n_dot_h, v_dot_h, material.clearcoat_gloss) * clearcoat_prob;
 
             if pdf < 1e-5 {
                 return BrdfSample {
@@ -112,7 +110,8 @@ impl Brdf for Disney {
                 let v_dot_h = view.dot(half);
                 let l_dot_h = light.dot(half);
 
-                let pdf = ggx_pdf(n_dot_h, v_dot_h, material.roughness) * (1.0 - clearcoat_prob);
+                let pdf =
+                    ggx_pdf_specular(n_dot_h, v_dot_h, material.roughness) * (1.0 - clearcoat_prob);
 
                 if pdf < 1e-5 {
                     return BrdfSample {
@@ -160,7 +159,7 @@ impl Brdf for Disney {
                     let n_dot_v = normal.dot(view);
                     let v_dot_h = view.dot(half);
 
-                    let pdf = ggx_pdf(n_dot_h, v_dot_h, material.roughness)
+                    let pdf = ggx_pdf_specular(n_dot_h, v_dot_h, material.roughness)
                         * (1.0 - clearcoat_prob)
                         * specular_prob;
 
@@ -254,7 +253,7 @@ fn distribution_term_clearcoat(n_dot_h: f32, gloss: f32) -> f32 {
         a + (b - a) * t
     }
 
-    let alpha = lerp(0.2, 0.001, gloss);
+    let alpha = lerp(0.1, 0.001, gloss);
     let alpha2 = alpha * alpha;
 
     let denom_core = n_dot_h * n_dot_h * (alpha2 - 1.0) + 1.0;
@@ -338,6 +337,10 @@ fn ggx_importance_sample(normal: Vec3A, roughness: f32) -> Vec3A {
     tbn.mul_vec3a(Vec3A::new(x, y, z))
 }
 
-fn ggx_pdf(n_dot_h: f32, v_dot_h: f32, roughness: f32) -> f32 {
+fn ggx_pdf_specular(n_dot_h: f32, v_dot_h: f32, roughness: f32) -> f32 {
     distribution_term_specular(n_dot_h, roughness) * n_dot_h / (4.0 * v_dot_h)
+}
+
+fn ggx_pdf_clearcoat(n_dot_h: f32, v_dot_h: f32, gloss: f32) -> f32 {
+    distribution_term_clearcoat(n_dot_h, gloss) * n_dot_h / (4.0 * v_dot_h)
 }
