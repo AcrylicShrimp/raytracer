@@ -43,7 +43,7 @@ impl Brdf for Disney {
 
         if rand::random::<f32>() < clearcoat_prob {
             let alpha = lerp(0.1, 0.001, material.clearcoat_gloss);
-            let half = ggx_importance_sample(normal, alpha);
+            let half = gtr1_importance_sample(normal, alpha);
             let light = (-view).reflect(half);
 
             let l_dot_h = light.dot(half);
@@ -101,7 +101,7 @@ impl Brdf for Disney {
             }
 
             if rand::random::<f32>() < material.metallic {
-                let half = ggx_importance_sample(normal, material.roughness);
+                let half = gtr2_importance_sample(normal, material.roughness);
                 let light = (-view).reflect(half);
 
                 let n_dot_h = normal.dot(half);
@@ -143,7 +143,7 @@ impl Brdf for Disney {
                     pdf,
                 }
             } else {
-                let half = ggx_importance_sample(normal, material.roughness);
+                let half = gtr2_importance_sample(normal, material.roughness);
                 let light = (-view).reflect(half);
 
                 let l_dot_h = light.dot(half);
@@ -315,11 +315,33 @@ fn clearcoat_term(n_dot_h: f32, n_dot_v: f32, n_dot_l: f32, l_dot_h: f32, gloss:
         / (4.0 * n_dot_v * n_dot_l)
 }
 
-fn ggx_importance_sample(normal: Vec3A, roughness: f32) -> Vec3A {
+fn gtr2_importance_sample(normal: Vec3A, roughness: f32) -> Vec3A {
     let r1 = rand::random::<f32>();
     let r2 = rand::random::<f32>();
 
     let alpha = roughness * roughness;
+    let alpha2 = alpha * alpha;
+
+    let cos_theta = ((1.0 - r1) / (r1 * (alpha2 - 1.0) + 1.0)).sqrt();
+    let sin_theta = (1.0 - cos_theta * cos_theta).max(0.0).sqrt();
+
+    let phi = 2.0 * PI * r2;
+    let cos_phi = phi.cos();
+    let sin_phi = phi.sin();
+
+    let x = sin_theta * cos_phi;
+    let y = sin_theta * sin_phi;
+    let z = cos_theta;
+
+    let tbn = create_orthonormal_basis(normal);
+    tbn.mul_vec3a(Vec3A::new(x, y, z))
+}
+
+fn gtr1_importance_sample(normal: Vec3A, gloss: f32) -> Vec3A {
+    let r1: f32 = rand::random::<f32>();
+    let r2 = rand::random::<f32>();
+
+    let alpha = lerp(0.1, 0.001, gloss);
     let alpha2 = alpha * alpha;
 
     let cos_theta = ((1.0 - r1) / (r1 * (alpha2 - 1.0) + 1.0)).sqrt();
