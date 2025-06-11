@@ -53,7 +53,7 @@ impl Object for Sphere {
             outward_normal,
             t,
             ray.direction,
-            self.material.clone(),
+            &self.material,
         );
 
         Some(hit_record)

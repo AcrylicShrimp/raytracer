@@ -46,26 +46,25 @@ impl Camera {
         let exposure = options.exposure;
         let gamma = options.gamma;
 
-        let mut hdr_buffer = vec![Vec3A::ZERO; (screen_width * screen_height) as usize];
+        let mut buffer = vec![Vec3A::ZERO; (screen_width * screen_height) as usize];
 
-        hdr_buffer
+        buffer
             .par_iter_mut()
             .enumerate()
             .for_each(|(index, pixel)| {
                 let x = index % screen_width as usize;
                 let y = index / screen_width as usize;
 
-                let mut sum = Vec3A::ZERO;
+                let mut color = Vec3A::ZERO;
 
                 for _ in 0..sample_per_pixel {
                     let pixel_x = (x as f32 + rand::random::<f32>()) / screen_width as f32;
                     let pixel_y = (y as f32 + rand::random::<f32>()) / screen_height as f32;
                     let ray = self.cast_ray(aspect_ratio, pixel_x, pixel_y);
                     let energy = trace_ray(&ray, scene, brdf, max_ray_bounces);
-                    sum += energy;
+                    color += energy / sample_per_pixel as f32;
                 }
 
-                let color = sum / sample_per_pixel as f32;
                 *pixel = map_hdr_to_sdr(color, exposure, gamma);
             });
 
@@ -75,7 +74,7 @@ impl Camera {
             .par_chunks_mut(4)
             .enumerate()
             .for_each(|(index, pixel)| {
-                let color = hdr_buffer[index];
+                let color = buffer[index];
                 let color = (color * 255f32)
                     .clamp(Vec3A::ZERO, Vec3A::splat(255f32))
                     .round();
@@ -131,26 +130,27 @@ fn trace_ray(ray: &Ray, scene: &Scene, brdf: &impl Brdf, depth: u32) -> Vec3A {
         }
     };
 
-    // L_o
-    let mut energy = Vec3A::ZERO;
-
-    if hit.material.is_emissive {
-        // L_e
-        energy += hit.material.emission;
-    }
+    let direct_term = if hit.material.is_emissive {
+        hit.material.emission
+    } else {
+        Vec3A::ZERO
+    };
 
     let brdf_sample = brdf.sample(-ray.direction, hit.normal, &hit.material);
-    let next_ray = Ray::new(hit.point + hit.normal * 1e-3, brdf_sample.direction);
+    let next_ray = Ray::new(
+        hit.point + brdf_sample.direction * 1e-3,
+        brdf_sample.direction,
+    );
     let next_energy = trace_ray(&next_ray, scene, brdf, depth - 1);
 
     // attenuation = f_r * cos_theta / pdf
     // L_o * attenuation
-    energy += brdf_sample.attenuation * next_energy;
+    let indirect_term = brdf_sample.attenuation * next_energy;
 
     // TODO: perform NEE (Next Event Estimation) and MIS (Multiple Importance Sampling) here to effectively handle direct lighting
 
     // L_e + L_o * attenuation
-    energy
+    direct_term + indirect_term
 }
 
 fn map_hdr_to_sdr(color: Vec3A, exposure: f32, gamma: f32) -> Vec3A {

@@ -80,7 +80,7 @@ impl Object for Box {
             world_normal,
             t_hit,
             ray.direction,
-            self.material.clone(),
+            &self.material,
         ))
     }
 }

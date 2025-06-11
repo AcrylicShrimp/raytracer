@@ -20,7 +20,6 @@ use glam::{Quat, Vec3A};
 use std::{fs::File, io::BufWriter, path::Path};
 
 const MATERIAL_WHITE: Material = Material {
-    is_reflective: false,
     is_emissive: false,
     emission: Vec3A::ZERO,
     albedo: Vec3A::ONE,
@@ -36,7 +35,6 @@ const MATERIAL_WHITE: Material = Material {
     clearcoat_gloss: 0.0,
 };
 const MATERIAL_RED: Material = Material {
-    is_reflective: false,
     is_emissive: false,
     emission: Vec3A::ZERO,
     albedo: Vec3A::new(1.0, 0.0, 0.0),
@@ -48,11 +46,10 @@ const MATERIAL_RED: Material = Material {
     anisotropic: 0.0,
     sheen: 0.0,
     sheen_tint: Vec3A::ZERO,
-    clearcoat: 0.0,
-    clearcoat_gloss: 0.0,
+    clearcoat: 1.0,
+    clearcoat_gloss: 0.9,
 };
 const MATERIAL_GREEN: Material = Material {
-    is_reflective: false,
     is_emissive: false,
     emission: Vec3A::ZERO,
     albedo: Vec3A::new(0.0, 1.0, 0.0),
@@ -64,13 +61,12 @@ const MATERIAL_GREEN: Material = Material {
     anisotropic: 0.0,
     sheen: 0.0,
     sheen_tint: Vec3A::ZERO,
-    clearcoat: 0.0,
-    clearcoat_gloss: 0.0,
+    clearcoat: 1.0,
+    clearcoat_gloss: 0.9,
 };
 const MATERIAL_LIGHT: Material = Material {
-    is_reflective: false,
     is_emissive: true,
-    emission: Vec3A::new(10.0, 10.0, 10.0),
+    emission: Vec3A::new(30.0, 30.0, 30.0),
     albedo: Vec3A::ZERO,
     subsurface: 0.0,
     metallic: 0.0,
@@ -84,7 +80,6 @@ const MATERIAL_LIGHT: Material = Material {
     clearcoat_gloss: 0.0,
 };
 const MATERIAL_BOX_1: Material = Material {
-    is_reflective: false,
     is_emissive: false,
     emission: Vec3A::ZERO,
     albedo: Vec3A::new(1.0, 1.0, 1.0),
@@ -92,7 +87,7 @@ const MATERIAL_BOX_1: Material = Material {
     metallic: 0.9,
     specular: 0.0,
     specular_tint: Vec3A::ZERO,
-    roughness: 0.5,
+    roughness: 0.1,
     anisotropic: 0.0,
     sheen: 0.0,
     sheen_tint: Vec3A::ZERO,
@@ -100,15 +95,14 @@ const MATERIAL_BOX_1: Material = Material {
     clearcoat_gloss: 0.0,
 };
 const MATERIAL_BOX_2: Material = Material {
-    is_reflective: false,
     is_emissive: false,
     emission: Vec3A::ZERO,
     albedo: Vec3A::new(1.0, 1.0, 1.0),
     subsurface: 0.0,
     metallic: 0.0,
-    specular: 0.8,
+    specular: 1.0,
     specular_tint: Vec3A::ZERO,
-    roughness: 0.2,
+    roughness: 0.05,
     anisotropic: 0.0,
     sheen: 0.0,
     sheen_tint: Vec3A::ZERO,
@@ -197,8 +191,8 @@ fn main() {
         &RenderOptions {
             screen_width,
             screen_height,
-            sample_per_pixel: 4096,
-            max_ray_bounces: 32,
+            sample_per_pixel: 4096 * 16,
+            max_ray_bounces: 8,
             exposure: 1.0,
             gamma: 2.2,
         },
