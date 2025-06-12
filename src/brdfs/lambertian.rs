@@ -1,18 +1,24 @@
-use crate::brdf::{Brdf, BrdfSample, random_cosine_direction};
+use crate::brdf::{Brdf, BrdfEval, BrdfSample, random_cosine_direction};
 use crate::material::Material;
 use glam::Vec3A;
 use std::f32::consts::FRAC_1_PI;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct LambertianBrdf;
 
 impl Brdf for LambertianBrdf {
-    fn eval(&self, _view: Vec3A, normal: Vec3A, light: Vec3A, material: &Material) -> Vec3A {
+    fn eval(&self, _view: Vec3A, normal: Vec3A, light: Vec3A, material: &Material) -> BrdfEval {
         if normal.dot(light) <= 0.0 {
-            return Vec3A::ZERO;
+            return BrdfEval {
+                f_r: Vec3A::ZERO,
+                pdf: 0.0,
+            };
         }
 
-        material.albedo * FRAC_1_PI
+        BrdfEval {
+            f_r: material.albedo * FRAC_1_PI,
+            pdf: normal.dot(light).max(0.0) * FRAC_1_PI,
+        }
     }
 
     fn sample(&self, _view: Vec3A, normal: Vec3A, material: &Material) -> BrdfSample {

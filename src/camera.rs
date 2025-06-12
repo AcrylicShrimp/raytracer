@@ -1,5 +1,11 @@
-use crate::{brdf::Brdf, ray::Ray, scene::Scene};
+use crate::{
+    brdf::{Brdf, BrdfEval},
+    hit::HitRecord,
+    ray::Ray,
+    scene::Scene,
+};
 use glam::Vec3A;
+use rand::seq::IndexedRandom;
 use rayon::prelude::*;
 
 #[derive(Debug, Clone)]
@@ -25,14 +31,17 @@ impl Camera {
     }
 
     pub fn cast_ray(&self, aspect_ratio: f32, pixel_x: f32, pixel_y: f32) -> Ray {
-        let fov_rad = self.fov.to_radians();
-        let f = 1.0 / (fov_rad / 2.0).tan();
+        let ndc_x = pixel_x * 2.0 - 1.0;
+        let ndc_y = 1.0 - pixel_y * 2.0;
 
-        let pixel_x = (pixel_x * 2.0 - 1.0) * aspect_ratio * f;
-        let pixel_y = (pixel_y * 2.0 - 1.0) * f;
+        let tan_fov_half = (self.fov.to_radians() / 2.0).tan();
+        let plane_x = ndc_x * aspect_ratio * tan_fov_half;
+        let plane_y = ndc_y * tan_fov_half;
 
         let right = self.direction.cross(self.up).normalize();
-        let direction = self.direction - self.up * pixel_y + right * pixel_x;
+        let up = right.cross(self.direction).normalize();
+
+        let direction = (self.direction + right * plane_x + up * plane_y).normalize();
 
         Ray::new(self.position, direction)
     }
@@ -61,7 +70,7 @@ impl Camera {
                     let pixel_x = (x as f32 + rand::random::<f32>()) / screen_width as f32;
                     let pixel_y = (y as f32 + rand::random::<f32>()) / screen_height as f32;
                     let ray = self.cast_ray(aspect_ratio, pixel_x, pixel_y);
-                    let energy = trace_ray(&ray, scene, brdf, max_ray_bounces);
+                    let energy = trace_ray(&ray, scene, brdf, max_ray_bounces, true);
                     color += energy / sample_per_pixel as f32;
                 }
 
@@ -86,6 +95,12 @@ impl Camera {
 
         frame_buffer
     }
+}
+
+fn map_hdr_to_sdr(color: Vec3A, exposure: f32, gamma: f32) -> Vec3A {
+    let color = color * exposure;
+    let color = color / (color + 1f32);
+    color.powf(1f32 / gamma)
 }
 
 pub struct RenderOptions {
@@ -117,7 +132,7 @@ pub struct RenderOptions {
 /// Note that the BRDF is responsible for computing `attenuation`, which represents:
 ///
 /// `attenuation = f_r * cos_theta / pdf`
-fn trace_ray(ray: &Ray, scene: &Scene, brdf: &impl Brdf, depth: u32) -> Vec3A {
+fn trace_ray(ray: &Ray, scene: &Scene, brdf: &impl Brdf, depth: u32, is_first: bool) -> Vec3A {
     if depth == 0 {
         return Vec3A::ZERO;
     }
@@ -130,31 +145,163 @@ fn trace_ray(ray: &Ray, scene: &Scene, brdf: &impl Brdf, depth: u32) -> Vec3A {
         }
     };
 
-    let direct_term = if hit.material.is_emissive {
-        hit.material.emission
+    let emitted_term = if is_first && hit.object.material().is_emissive {
+        hit.object.material().emission
     } else {
         Vec3A::ZERO
     };
+    let direct_term = compute_nee_contribution(&hit, scene, brdf, -ray.direction);
+    let brdf_sample = brdf.sample(-ray.direction, hit.normal, hit.object.material());
 
-    let brdf_sample = brdf.sample(-ray.direction, hit.normal, hit.material);
+    if brdf_sample.attenuation.length_squared() < 1e-5 || brdf_sample.pdf < 1e-5 {
+        // indirect term is too small; ignore it
+        return emitted_term + direct_term;
+    }
+
     let next_ray = Ray::new(
         hit.point + brdf_sample.direction * 1e-3,
         brdf_sample.direction,
     );
-    let next_energy = trace_ray(&next_ray, scene, brdf, depth - 1);
+    let mut brdf_is_emissive = false;
 
-    // attenuation = f_r * cos_theta / pdf
-    // L_o * attenuation
-    let indirect_term = brdf_sample.attenuation * next_energy;
+    if let Some(hit) = scene.hit(&next_ray, 1e-3, f32::INFINITY) {
+        if hit.object.material().is_emissive {
+            brdf_is_emissive = true;
+            'mis: {
+                let pdf_light = calculate_light_solid_angle_pdf(scene, &next_ray, &hit);
 
-    // TODO: perform NEE (Next Event Estimation) and MIS (Multiple Importance Sampling) here to effectively handle direct lighting
+                if pdf_light < 1e-5 {
+                    indirect = Vec3A::ZERO;
+                    break 'mis;
+                }
 
-    // L_e + L_o * attenuation
-    direct_term + indirect_term
+                let pdf_brdf_2 = brdf_sample.pdf * brdf_sample.pdf;
+                let pdf_light_2 = pdf_light * pdf_light;
+
+                if pdf_brdf_2 < 1e-5 && pdf_light_2 < 1e-5 {
+                    indirect = Vec3A::ZERO;
+                } else {
+                    let mis_weight = pdf_brdf_2 / (pdf_brdf_2 + pdf_light_2);
+                    indirect = hit.object.material().emission * mis_weight;
+                }
+            }
+        } else {
+            // attenuation = f_r * cos_theta / pdf
+            // L_o * attenuation
+            indirect =
+                trace_ray(&next_ray, scene, brdf, depth - 1, false) * brdf_sample.attenuation;
+        }
+    } else {
+        // attenuation = f_r * cos_theta / pdf
+        // L_o * attenuation
+        indirect = trace_ray(&next_ray, scene, brdf, depth - 1, false) * brdf_sample.attenuation;
+    }
+
+    // L_e, L_o * attenuation
+    emitted_term + direct_term + indirect
 }
 
-fn map_hdr_to_sdr(color: Vec3A, exposure: f32, gamma: f32) -> Vec3A {
-    let color = color * exposure;
-    let color = color / (color + 1f32);
-    color.powf(1f32 / gamma)
+fn compute_nee_contribution(
+    hit: &HitRecord,
+    scene: &Scene,
+    brdf: &impl Brdf,
+    view: Vec3A,
+) -> Vec3A {
+    let total_light_objects: Vec<_> = scene
+        .objects()
+        .iter()
+        .enumerate()
+        .filter(|(_, object)| object.material().is_emissive)
+        .collect();
+    let chosen_light_object = total_light_objects.choose(&mut rand::rng());
+    let (light_object_index, light_object) = match chosen_light_object {
+        Some((light_object_index, light_object)) => (*light_object_index, light_object.as_ref()),
+        None => {
+            // no light objects; ignore it
+            return Vec3A::ZERO;
+        }
+    };
+
+    let n_light = scene.light_count();
+    let n_light_inv = (n_light as f32).recip();
+
+    let area = light_object.area();
+    let area_inv = area.recip();
+
+    if area < 1e-5 {
+        // area is too small; ignore it
+        return Vec3A::ZERO;
+    }
+
+    let light_point = light_object.sample_point();
+    let diff = light_point.point - hit.point;
+
+    if diff.length_squared() < 1e-3 {
+        // light is too close; ignore it, treating the light as if it is behind the surface
+        return Vec3A::ZERO;
+    }
+
+    let r_squared = diff.length_squared();
+    let r = diff.length();
+    let light_direction = diff / r;
+
+    let cos_theta = hit.normal.dot(light_direction).max(0.0);
+    let cos_theta_l = light_point.normal.dot(-light_direction).max(0.0);
+
+    if cos_theta_l < 1e-5 {
+        // light is not visible; ignore it
+        return Vec3A::ZERO;
+    }
+
+    let is_visible = match scene.hit(
+        &Ray::new(hit.point + light_direction * 1e-3, light_direction),
+        1e-3,
+        r,
+    ) {
+        Some(hit) => hit.object_index == light_object_index,
+        None => true,
+    };
+
+    if !is_visible {
+        // light is not visible; ignore it
+        return Vec3A::ZERO;
+    }
+
+    let BrdfEval { f_r, pdf: pdf_brdf } =
+        brdf.eval(view, hit.normal, light_direction, hit.object.material());
+    let pdf_light = r_squared / cos_theta_l * area_inv * n_light_inv;
+
+    let pdf_brdf_2 = pdf_brdf * pdf_brdf;
+    let pdf_light_2 = pdf_light * pdf_light;
+
+    if pdf_brdf_2 < 1e-5 && pdf_light_2 < 1e-5 {
+        // pdf is too small; ignore it
+        return Vec3A::ZERO;
+    }
+
+    let mis_weight = pdf_light_2 / (pdf_brdf_2 + pdf_light_2);
+    let geometry_term = cos_theta * cos_theta_l / r_squared;
+    let contribution = light_object.material().emission * f_r * geometry_term;
+    let pdf_area = area_inv * n_light_inv;
+
+    (contribution / pdf_area) * mis_weight
+}
+
+fn calculate_light_solid_angle_pdf(scene: &Scene, ray: &Ray, hit: &HitRecord) -> f32 {
+    let area = hit.object.area();
+
+    if area < 1e-5 {
+        return 0.0;
+    }
+
+    let n_light = scene.light_count();
+
+    if n_light == 0 {
+        return 0.0;
+    }
+
+    let r_squared = hit.t * hit.t;
+    let cos_theta_l = hit.normal.dot(-ray.direction).max(1e-3);
+
+    r_squared / cos_theta_l / area / n_light as f32
 }

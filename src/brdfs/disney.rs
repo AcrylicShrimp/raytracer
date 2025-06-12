@@ -1,5 +1,5 @@
 use crate::{
-    brdf::{Brdf, BrdfSample, create_orthonormal_basis, lerp, random_cosine_direction},
+    brdf::{Brdf, BrdfEval, BrdfSample, create_orthonormal_basis, lerp, random_cosine_direction},
     material::Material,
 };
 use glam::Vec3A;
@@ -8,9 +8,12 @@ use std::f32::consts::{FRAC_1_PI, PI};
 pub struct Disney;
 
 impl Brdf for Disney {
-    fn eval(&self, view: Vec3A, normal: Vec3A, light: Vec3A, material: &Material) -> Vec3A {
+    fn eval(&self, view: Vec3A, normal: Vec3A, light: Vec3A, material: &Material) -> BrdfEval {
         if normal.dot(light) <= 0.0 {
-            return Vec3A::ZERO;
+            return BrdfEval {
+                f_r: Vec3A::ZERO,
+                pdf: 0.0,
+            };
         }
 
         let half = (view + light).normalize();

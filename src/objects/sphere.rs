@@ -1,5 +1,12 @@
-use crate::{aabb::Aabb, hit::HitRecord, material::Material, object::Object, ray::Ray};
+use crate::{
+    aabb::Aabb,
+    hit::HitRecord,
+    material::Material,
+    object::{Object, PointOnObject},
+    ray::Ray,
+};
 use glam::Vec3A;
+use std::f32::consts::PI;
 
 #[derive(Debug, Clone)]
 pub struct Sphere {
@@ -9,6 +16,38 @@ pub struct Sphere {
 }
 
 impl Object for Sphere {
+    fn material(&self) -> &Material {
+        &self.material
+    }
+
+    fn area(&self) -> f32 {
+        4.0 * PI * self.radius * self.radius
+    }
+
+    fn sample_point(&self) -> PointOnObject {
+        if self.radius < 1e-3 {
+            return PointOnObject {
+                point: self.center,
+                normal: Vec3A::Y,
+            };
+        }
+
+        let r1 = rand::random::<f32>();
+        let r2 = rand::random::<f32>();
+
+        let phi = 2.0 * PI * r1;
+        let theta = (2.0 * r2 - 1.0).acos();
+
+        let x = phi.cos() * theta.sin();
+        let y = phi.sin() * theta.sin();
+        let z = theta.cos();
+
+        let point = Vec3A::new(x, y, z) * self.radius + self.center;
+        let normal = (point - self.center).normalize();
+
+        PointOnObject { point, normal }
+    }
+
     fn bounding_box(&self) -> Aabb {
         Aabb {
             min: self.center - Vec3A::splat(self.radius),
@@ -16,7 +55,13 @@ impl Object for Sphere {
         }
     }
 
-    fn intersect(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
+    fn intersect(
+        &self,
+        ray: &Ray,
+        t_min: f32,
+        t_max: f32,
+        object_index: usize,
+    ) -> Option<HitRecord> {
         let oc = ray.origin - self.center;
         // Optimized quadratic formula calculation
         let a = ray.direction.length_squared();
@@ -48,13 +93,8 @@ impl Object for Sphere {
         let outward_normal = (point - self.center).normalize();
 
         // Create hit record with the proper normal orientation
-        let hit_record = HitRecord::new(
-            point,
-            outward_normal,
-            t,
-            ray.direction,
-            &self.material,
-        );
+        let hit_record =
+            HitRecord::new(point, outward_normal, t, ray.direction, object_index, self);
 
         Some(hit_record)
     }

@@ -1,4 +1,10 @@
-use crate::{aabb::Aabb, hit::HitRecord, material::Material, object::Object, ray::Ray};
+use crate::{
+    aabb::Aabb,
+    hit::HitRecord,
+    material::Material,
+    object::{Object, PointOnObject},
+    ray::Ray,
+};
 use glam::{Mat3A, Quat, Vec3A};
 
 #[derive(Debug, Clone)]
@@ -10,6 +16,78 @@ pub struct Box {
 }
 
 impl Object for Box {
+    fn material(&self) -> &Material {
+        &self.material
+    }
+
+    fn area(&self) -> f32 {
+        self.size.x * self.size.y * 2.0
+            + self.size.x * self.size.z * 2.0
+            + self.size.y * self.size.z * 2.0
+    }
+
+    fn sample_point(&self) -> PointOnObject {
+        let area = self.area();
+
+        if area < 1e-5 {
+            return PointOnObject {
+                point: self.center,
+                normal: Vec3A::Y,
+            };
+        }
+
+        let size_x = self.size.y * self.size.z * 2.0;
+        let size_y = self.size.x * self.size.z * 2.0;
+        let size_z = self.size.x * self.size.y * 2.0;
+
+        let area_inv = area.recip();
+        let p_x_plus = size_x * area_inv * 0.5;
+        let p_x_minus = size_x * area_inv * 0.5;
+        let p_y_plus = size_y * area_inv * 0.5;
+        let p_y_minus = size_y * area_inv * 0.5;
+        let p_z_plus = size_z * area_inv * 0.5;
+
+        let cdf_x_minus = p_x_plus + p_x_minus;
+        let cdf_y_plus = cdf_x_minus + p_y_plus;
+        let cdf_y_minus = cdf_y_plus + p_y_minus;
+        let cdf_z_plus = cdf_y_minus + p_z_plus;
+
+        let u = rand::random::<f32>();
+        let v = rand::random::<f32>();
+        let dice = rand::random::<f32>();
+
+        let (local_point, local_normal) = if dice < p_x_plus {
+            let y = (u * 2.0 - 1.0) * self.size.y * 0.5;
+            let z = (v * 2.0 - 1.0) * self.size.z * 0.5;
+            (Vec3A::new(self.size.x * 0.5, y, z), Vec3A::X)
+        } else if dice < cdf_x_minus {
+            let y = (u * 2.0 - 1.0) * self.size.y * 0.5;
+            let z = (v * 2.0 - 1.0) * self.size.z * 0.5;
+            (Vec3A::new(-self.size.x * 0.5, y, z), Vec3A::NEG_X)
+        } else if dice < cdf_y_plus {
+            let x = (u * 2.0 - 1.0) * self.size.x * 0.5;
+            let z = (v * 2.0 - 1.0) * self.size.z * 0.5;
+            (Vec3A::new(x, self.size.y * 0.5, z), Vec3A::Y)
+        } else if dice < cdf_y_minus {
+            let x = (u * 2.0 - 1.0) * self.size.x * 0.5;
+            let z = (v * 2.0 - 1.0) * self.size.z * 0.5;
+            (Vec3A::new(x, -self.size.y * 0.5, z), Vec3A::NEG_Y)
+        } else if dice < cdf_z_plus {
+            let x = (u * 2.0 - 1.0) * self.size.x * 0.5;
+            let y = (v * 2.0 - 1.0) * self.size.y * 0.5;
+            (Vec3A::new(x, y, self.size.z * 0.5), Vec3A::Z)
+        } else {
+            let x = (u * 2.0 - 1.0) * self.size.x * 0.5;
+            let y = (v * 2.0 - 1.0) * self.size.y * 0.5;
+            (Vec3A::new(x, y, -self.size.z * 0.5), Vec3A::NEG_Z)
+        };
+
+        PointOnObject {
+            point: self.rotation.mul_vec3a(local_point) + self.center,
+            normal: self.rotation.mul_vec3a(local_normal),
+        }
+    }
+
     fn bounding_box(&self) -> Aabb {
         let half_size = self.size * 0.5;
         let rot_mat = Mat3A::from_quat(self.rotation);
@@ -26,7 +104,13 @@ impl Object for Box {
         }
     }
 
-    fn intersect(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
+    fn intersect(
+        &self,
+        ray: &Ray,
+        t_min: f32,
+        t_max: f32,
+        object_index: usize,
+    ) -> Option<HitRecord> {
         let half_size = self.size * 0.5;
         let inv_rotation = self.rotation.inverse();
         let local_ray = Ray {
@@ -80,7 +164,8 @@ impl Object for Box {
             world_normal,
             t_hit,
             ray.direction,
-            &self.material,
+            object_index,
+            self,
         ))
     }
 }

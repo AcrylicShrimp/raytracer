@@ -10,7 +10,7 @@ mod ray;
 mod scene;
 
 use crate::{
-    brdfs::disney::Disney,
+    brdfs::lambertian::LambertianBrdf,
     camera::{Camera, RenderOptions},
     material::Material,
     objects::r#box::Box,
@@ -159,8 +159,12 @@ fn main() {
 
     // Light
     scene.add_object(Box {
-        center: Vec3A::new(0.0, BOX_OFFSET - LIGHT_THICKNESS * 0.5, 0.0),
-        size: Vec3A::new(LIGHT_SIZE, LIGHT_SIZE, LIGHT_THICKNESS),
+        center: Vec3A::new(
+            0.0,
+            BOX_OFFSET - BOX_THICKNESS * 0.5 - LIGHT_THICKNESS * 0.5,
+            0.0,
+        ),
+        size: Vec3A::new(LIGHT_SIZE, LIGHT_THICKNESS, LIGHT_SIZE),
         rotation: Quat::IDENTITY,
         material: MATERIAL_LIGHT.clone(),
     });
@@ -183,16 +187,16 @@ fn main() {
         Vec3A::new(0.0, 0.0, 3.25),
         Vec3A::new(0.0, 0.0, 0.0),
         Vec3A::new(0.0, 1.0, 0.0),
-        120.0,
+        60.0,
     );
     let frame_buffer = camera.render(
         &scene,
-        &Disney,
+        &LambertianBrdf,
         &RenderOptions {
             screen_width,
             screen_height,
-            sample_per_pixel: 4096 * 16,
-            max_ray_bounces: 16,
+            sample_per_pixel: 32,
+            max_ray_bounces: 8,
             exposure: 1.0,
             gamma: 2.2,
         },
