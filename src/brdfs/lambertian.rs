@@ -7,6 +7,10 @@ use std::f32::consts::FRAC_1_PI;
 pub struct LambertianBrdf;
 
 impl Brdf for LambertianBrdf {
+    fn is_delta_surface(&self, _material: &Material) -> bool {
+        false
+    }
+
     fn eval(&self, _view: Vec3A, normal: Vec3A, light: Vec3A, material: &Material) -> BrdfEval {
         if normal.dot(light) <= 0.0 {
             return BrdfEval {

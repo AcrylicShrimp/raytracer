@@ -16,6 +16,7 @@ pub struct BrdfSample {
 }
 
 pub trait Brdf: Send + Sync {
+    fn is_delta_surface(&self, material: &Material) -> bool;
     fn eval(&self, view: Vec3A, normal: Vec3A, light: Vec3A, material: &Material) -> BrdfEval;
     fn sample(&self, view: Vec3A, normal: Vec3A, material: &Material) -> BrdfSample;
 }

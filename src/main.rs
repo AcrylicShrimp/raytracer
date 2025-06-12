@@ -195,7 +195,7 @@ fn main() {
         &RenderOptions {
             screen_width,
             screen_height,
-            sample_per_pixel: 32,
+            sample_per_pixel: 1024,
             max_ray_bounces: 8,
             exposure: 1.0,
             gamma: 2.2,
