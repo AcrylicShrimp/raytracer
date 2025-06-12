@@ -1,7 +1,7 @@
 use crate::brdf::{Brdf, BrdfSample, random_cosine_direction};
 use crate::material::Material;
 use glam::Vec3A;
-use std::f32::consts::{FRAC_1_PI, PI};
+use std::f32::consts::FRAC_1_PI;
 
 #[derive(Debug, Clone)]
 pub struct LambertianBrdf;

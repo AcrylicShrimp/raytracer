@@ -136,7 +136,7 @@ fn trace_ray(ray: &Ray, scene: &Scene, brdf: &impl Brdf, depth: u32) -> Vec3A {
         Vec3A::ZERO
     };
 
-    let brdf_sample = brdf.sample(-ray.direction, hit.normal, &hit.material);
+    let brdf_sample = brdf.sample(-ray.direction, hit.normal, hit.material);
     let next_ray = Ray::new(
         hit.point + brdf_sample.direction * 1e-3,
         brdf_sample.direction,
