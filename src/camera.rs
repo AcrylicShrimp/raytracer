@@ -224,11 +224,12 @@ fn compute_nee_contribution(
     let total_light_objects: Vec<_> = scene
         .objects()
         .iter()
-        .filter(|object| object.material().is_emissive)
+        .enumerate()
+        .filter(|(_, object)| object.material().is_emissive)
         .collect();
     let chosen_light_object = total_light_objects.choose(&mut rand::rng());
-    let light_object = match chosen_light_object {
-        Some(light_object) => light_object.as_ref(),
+    let (light_object_index, light_object) = match chosen_light_object {
+        Some((index, object)) => (*index, object.as_ref()),
         None => {
             // no light objects; ignore it
             return Vec3A::ZERO;
@@ -267,7 +268,10 @@ fn compute_nee_contribution(
     }
 
     let shadow_ray = Ray::new(hit.point + hit.normal * 1e-5, light_direction);
-    let is_visible = scene.hit(&shadow_ray, 1e-5, r - 2e-5).is_none();
+    let is_visible = match scene.hit(&shadow_ray, 1e-5, r) {
+        Some(hit) => hit.object_index == light_object_index,
+        None => true,
+    };
 
     if !is_visible {
         // light is not visible; ignore it

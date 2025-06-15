@@ -104,7 +104,13 @@ impl Object for Box {
         }
     }
 
-    fn intersect(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
+    fn intersect(
+        &self,
+        ray: &Ray,
+        t_min: f32,
+        t_max: f32,
+        object_index: usize,
+    ) -> Option<HitRecord> {
         let half_size = self.size * 0.5;
         let inv_rotation = self.rotation.inverse();
         let local_ray = Ray {
@@ -159,6 +165,7 @@ impl Object for Box {
             t_hit,
             ray.direction,
             self,
+            object_index,
         ))
     }
 }
