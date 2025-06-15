@@ -33,7 +33,7 @@ impl Disney {
 
 impl Brdf for Disney {
     fn is_delta_surface(&self, material: &Material) -> bool {
-        material.roughness < 1e-5 && (1.0 - material.metallic).abs() < 1e-5
+        material.roughness < 1e-5
     }
 
     fn eval(&self, view: Vec3A, normal: Vec3A, light: Vec3A, material: &Material) -> BrdfEval {
@@ -87,6 +87,22 @@ impl Brdf for Disney {
     }
 
     fn sample(&self, view: Vec3A, normal: Vec3A, material: &Material) -> BrdfSample {
+        if self.is_delta_surface(material) {
+            let light = (-view).reflect(normal);
+            let n_dot_v = normal.dot(view).max(0.0);
+
+            let metallic_attenuation = material.albedo;
+            let dielectric_attenuation =
+                fresnel_term(n_dot_v, Vec3A::splat(material.specular * 0.08));
+            let attenuation = dielectric_attenuation.lerp(metallic_attenuation, material.metallic);
+
+            return BrdfSample {
+                direction: light,
+                attenuation,
+                pdf: 1.0,
+            };
+        }
+
         let (p_clearcoat_lobe, p_specular_lobe, _p_diffuse_lobe) =
             Self::compute_lobe_weights(material);
         let dice = rand::random::<f32>();
