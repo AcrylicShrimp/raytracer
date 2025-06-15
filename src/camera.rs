@@ -71,10 +71,10 @@ impl Camera {
                     let pixel_y = (y as f32 + rand::random::<f32>()) / screen_height as f32;
                     let ray = self.cast_ray(aspect_ratio, pixel_x, pixel_y);
                     let energy = trace_ray(&ray, scene, brdf, max_ray_bounces, None);
-                    color += energy / sample_per_pixel as f32;
+                    color += energy;
                 }
 
-                *pixel = map_hdr_to_sdr(color, exposure, gamma);
+                *pixel = map_hdr_to_sdr(color / sample_per_pixel as f32, exposure, gamma);
             });
 
         let mut frame_buffer = vec![0u8; (screen_width * screen_height * 4) as usize];
