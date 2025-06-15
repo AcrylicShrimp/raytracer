@@ -11,7 +11,7 @@ This is a simple raytracer written in Rust.
 
 ## to-dos
 
-- [ ] fix clearcoat
+- [x] fix clearcoat
 - [ ] apply specular tint
 - [x] implement NEE and MIT
 - [ ] implement subsurface
