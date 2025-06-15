@@ -70,7 +70,7 @@ impl Camera {
                     let pixel_x = (x as f32 + rand::random::<f32>()) / screen_width as f32;
                     let pixel_y = (y as f32 + rand::random::<f32>()) / screen_height as f32;
                     let ray = self.cast_ray(aspect_ratio, pixel_x, pixel_y);
-                    let energy = trace_ray(&ray, scene, brdf, max_ray_bounces, true);
+                    let energy = trace_ray(&ray, scene, brdf, max_ray_bounces, None);
                     color += energy / sample_per_pixel as f32;
                 }
 
@@ -132,18 +132,18 @@ pub struct RenderOptions {
 /// Note that the BRDF is responsible for computing `attenuation`, which represents:
 ///
 /// `attenuation = f_r * cos_theta / pdf`
-fn trace_ray(
+fn trace_ray<'a>(
     ray: &Ray,
-    scene: &Scene,
+    scene: &'a Scene,
     brdf: &impl Brdf,
     depth: u32,
-    was_previous_bounce_specular: bool,
+    hit: Option<HitRecord<'a>>,
 ) -> Vec3A {
     if depth == 0 {
         return Vec3A::ZERO;
     }
 
-    let hit = scene.hit(ray, 1e-3, f32::INFINITY);
+    let hit = hit.or_else(|| scene.hit(ray, 1e-3, f32::INFINITY));
     let hit = match hit {
         Some(hit) if hit.front_face => hit,
         _ => {
@@ -152,11 +152,9 @@ fn trace_ray(
     };
     let is_delta_surface = brdf.is_delta_surface(hit.object.material());
 
-    let emitted_term = if hit.object.material().is_emissive && was_previous_bounce_specular {
-        hit.object.material().emission
-    } else {
-        Vec3A::ZERO
-    };
+    if hit.object.material().is_emissive {
+        return hit.object.material().emission;
+    }
 
     let direct_term = if is_delta_surface {
         Vec3A::ZERO
@@ -168,35 +166,39 @@ fn trace_ray(
 
     if brdf_sample.attenuation.length_squared() < 1e-5 || brdf_sample.pdf < 1e-5 {
         // indirect term is too small; ignore it
-        return emitted_term + direct_term;
+        return direct_term;
     }
 
-    let next_ray = Ray::new(
-        hit.point + brdf_sample.direction * 1e-3,
-        brdf_sample.direction,
-    );
-    let mut indirect_term =
-        trace_ray(&next_ray, scene, brdf, depth - 1, is_delta_surface) * brdf_sample.attenuation;
-
-    if let Some(indirect_hit) = scene.hit(&next_ray, 1e-4, f32::INFINITY) {
-        if indirect_hit.object.material().is_emissive && !is_delta_surface {
-            let r_squared = (indirect_hit.point - hit.point).length_squared();
-            let cos_theta_l = indirect_hit.normal.dot(-next_ray.direction).max(0.0);
-            let light_area = indirect_hit.object.area();
-            let n_light = scene.light_count() as f32;
-
-            let pdf_light = (r_squared / (cos_theta_l * light_area)) / n_light;
+    let next_ray = Ray::new(hit.point + hit.normal * 1e-3, brdf_sample.direction);
+    let next_hit = scene.hit(&next_ray, 1e-3, f32::INFINITY);
+    let indirect_term = match next_hit {
+        Some(next_hit) if next_hit.object.material().is_emissive && is_delta_surface => {
+            next_hit.object.material().emission * brdf_sample.attenuation
+        }
+        Some(next_hit) if next_hit.object.material().is_emissive && !is_delta_surface => {
             let pdf_brdf = brdf_sample.pdf;
+            let r_squared = (next_hit.point - hit.point).length_squared();
+            let cos_theta_l = next_hit.normal.dot(-next_ray.direction).max(0.0);
 
-            if pdf_light + pdf_brdf > 1e-5 {
+            if cos_theta_l < 1e-5 {
+                Vec3A::ZERO
+            } else {
+                let light_area = next_hit.object.area();
+                let n_light = scene.light_count() as f32;
+                let pdf_light = (r_squared / (cos_theta_l * light_area)) / n_light;
+
                 let mis_weight_brdf = pdf_brdf / (pdf_light + pdf_brdf);
-                indirect_term *= mis_weight_brdf;
+                next_hit.object.material().emission * brdf_sample.attenuation * mis_weight_brdf
             }
         }
-    }
+        Some(next_hit) => {
+            trace_ray(&next_ray, scene, brdf, depth - 1, Some(next_hit)) * brdf_sample.attenuation
+        }
+        None => Vec3A::ZERO,
+    };
 
-    // L_e, L_o * attenuation
-    emitted_term + direct_term + indirect_term
+    // L_o * attenuation
+    direct_term + indirect_term
 }
 
 fn compute_nee_contribution(
@@ -250,13 +252,8 @@ fn compute_nee_contribution(
         return Vec3A::ZERO;
     }
 
-    let is_visible = scene
-        .hit(
-            &Ray::new(hit.point + light_direction * 1e-3, light_direction),
-            1e-3,
-            r - 1e-3,
-        )
-        .is_none();
+    let shadow_ray = Ray::new(hit.point + hit.normal * 1e-3, light_direction);
+    let is_visible = scene.hit(&shadow_ray, 1e-3, r - 1e-3).is_none();
 
     if !is_visible {
         // light is not visible; ignore it
