@@ -17,3 +17,9 @@ This is a simple raytracer written in Rust.
 - [ ] implement subsurface
 - [ ] implement sheer
 - [ ] implement anisotropic
+
+## roadmap
+
+1. introduce mesh type (that can be loaded from model files)
+2. index scene in BVH-like structure for fast and efficient ray-triangle intersection
+3. use `wgpu` for gpu-acceleration
