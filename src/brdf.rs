@@ -8,11 +8,26 @@ pub struct BrdfEval {
     pub pdf: f32,
 }
 
+impl BrdfEval {
+    pub const ZERO: Self = Self {
+        f_r: Vec3A::ZERO,
+        pdf: 0.0,
+    };
+}
+
 #[derive(Debug, Clone)]
 pub struct BrdfSample {
     pub attenuation: Vec3A,
     pub direction: Vec3A,
     pub pdf: f32,
+}
+
+impl BrdfSample {
+    pub const ZERO: Self = Self {
+        attenuation: Vec3A::ZERO,
+        direction: Vec3A::ZERO,
+        pdf: 0.0,
+    };
 }
 
 pub trait Brdf: Send + Sync {
