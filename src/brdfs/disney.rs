@@ -7,26 +7,56 @@ use std::f32::consts::{FRAC_1_PI, PI};
 
 pub struct Disney;
 
+impl Disney {
+    fn compute_lobe_weights(material: &Material) -> (f32, f32, f32) {
+        // the clearcoat lobe has maximum 25% chance of being sampled
+        let p_clearcoat_lobe = 0.25 * material.clearcoat;
+        let p_base_lobe = 1.0 - p_clearcoat_lobe;
+
+        let p_specular_lobe = material.metallic;
+        let p_diffuse_lobe = 1.0 - p_specular_lobe;
+
+        // the base lobes are under the clearcoat lobe
+        let p_specular_lobe = p_base_lobe * p_specular_lobe;
+        let p_diffuse_lobe = p_base_lobe * p_diffuse_lobe;
+
+        (p_clearcoat_lobe, p_specular_lobe, p_diffuse_lobe)
+    }
+}
+
 impl Brdf for Disney {
     fn is_delta_surface(&self, material: &Material) -> bool {
-        material.roughness < 1e-3
+        material.roughness < 1e-5 && (1.0 - material.metallic).abs() < 1e-5
     }
 
     fn eval(&self, view: Vec3A, normal: Vec3A, light: Vec3A, material: &Material) -> BrdfEval {
-        if normal.dot(light) <= 0.0 {
+        let (p_clearcoat_lobe, p_specular_lobe, p_diffuse_lobe) =
+            Self::compute_lobe_weights(material);
+
+        let half = (view + light).normalize();
+
+        let n_dot_h = normal.dot(half);
+        let n_dot_l = normal.dot(light);
+        let n_dot_v = normal.dot(view);
+        let v_dot_h = view.dot(half);
+        let l_dot_h = light.dot(half);
+
+        if n_dot_l < 1e-5 {
             return BrdfEval::ZERO;
         }
 
-        let half = (view + light).normalize();
-        let n_dot_h = normal.dot(half);
-        let n_dot_v = normal.dot(view);
-        let n_dot_l = normal.dot(light);
-        let l_dot_h = light.dot(half);
+        let pdf_clearcoat: f32 = ggx_pdf_clearcoat(n_dot_h, v_dot_h, material.clearcoat_gloss);
+        let pdf_specular = ggx_pdf_specular(n_dot_h, v_dot_h, material.roughness);
+        let pdf_diffuse = n_dot_l.max(0.0) * FRAC_1_PI;
 
         let dielectric_f0 = Vec3A::splat(material.specular * 0.08);
         let metallic_f0 = material.albedo;
         let f0 = dielectric_f0.lerp(metallic_f0, material.metallic);
 
+        let clearcoat_term =
+            clearcoat_term(n_dot_h, n_dot_v, n_dot_l, l_dot_h, material.clearcoat_gloss);
+        let specular_term =
+            specular_term(n_dot_h, n_dot_v, n_dot_l, l_dot_h, material.roughness, f0);
         let diffuse_term = diffuse_term(
             n_dot_v,
             n_dot_l,
@@ -34,208 +64,46 @@ impl Brdf for Disney {
             material.roughness,
             material.albedo,
         );
-        let specular_term =
-            specular_term(n_dot_h, n_dot_v, n_dot_l, l_dot_h, material.roughness, f0);
-        let clearcoat_term =
-            clearcoat_term(n_dot_h, n_dot_v, n_dot_l, l_dot_h, material.clearcoat_gloss);
 
         let f_r = (1.0 - material.metallic) * diffuse_term + specular_term + clearcoat_term;
+        let pdf = p_clearcoat_lobe * pdf_clearcoat
+            + p_specular_lobe * pdf_specular
+            + p_diffuse_lobe * pdf_diffuse;
 
-        let clearcoat_prob = material.clearcoat / (1.0 + material.clearcoat);
-        let base_prob = 1.0 - clearcoat_prob;
-
-        let pdf_clearcoat = ggx_pdf_clearcoat(n_dot_h, view.dot(half), material.clearcoat_gloss);
-        let weighted_pdf_clearcoat = pdf_clearcoat * clearcoat_prob;
-
-        let pdf_specular = ggx_pdf_specular(n_dot_h, view.dot(half), material.roughness);
-        let pdf_diffuse = n_dot_l.max(0.0) * FRAC_1_PI;
-
-        let weighted_pdf_base = if material.metallic < 1.0 {
-            let f = fresnel_term(l_dot_h, Vec3A::splat(material.specular * 0.08));
-            let specular_prob = f.max_element();
-
-            let pdf_dielectric_specular = pdf_specular * specular_prob;
-            let pdf_dielectric_diffuse = pdf_diffuse * (1.0 - specular_prob);
-
-            (1.0 - material.metallic) * (pdf_dielectric_specular + pdf_dielectric_diffuse)
-        } else {
-            pdf_specular * material.metallic
-        };
-
-        let pdf = weighted_pdf_clearcoat + weighted_pdf_base * base_prob;
+        if pdf < 1e-5 {
+            return BrdfEval::ZERO;
+        }
 
         BrdfEval { f_r, pdf }
     }
 
     fn sample(&self, view: Vec3A, normal: Vec3A, material: &Material) -> BrdfSample {
-        let clearcoat_prob = material.clearcoat / (1.0 + material.clearcoat);
+        let (p_clearcoat_lobe, p_specular_lobe, _p_diffuse_lobe) =
+            Self::compute_lobe_weights(material);
+        let dice = rand::random::<f32>();
 
-        if rand::random::<f32>() < clearcoat_prob {
+        let light = if dice < p_clearcoat_lobe {
             let half = gtr1_importance_sample(normal, material.clearcoat_gloss);
-            let light = (-view).reflect(half);
-
-            let l_dot_h = light.dot(half);
-            let n_dot_h = normal.dot(half);
-            let n_dot_l = normal.dot(light);
-            let n_dot_v = normal.dot(view);
-            let v_dot_h = view.dot(half);
-
-            let pdf =
-                ggx_pdf_clearcoat(n_dot_h, v_dot_h, material.clearcoat_gloss) * clearcoat_prob;
-
-            if pdf < 1e-5 {
-                return BrdfSample::ZERO;
-            }
-
-            if n_dot_l <= 0.0 {
-                return BrdfSample::ZERO;
-            }
-
-            let attenuation =
-                clearcoat_term(n_dot_h, n_dot_v, n_dot_l, l_dot_h, material.clearcoat_gloss)
-                    * n_dot_l
-                    / pdf;
-
-            return BrdfSample {
-                direction: light,
-                attenuation,
-                pdf,
-            };
-        }
-
-        if material.roughness < 1e-3 {
-            // perfect reflection
-            let direction = (-view).reflect(normal);
-
-            let dielectric_f0 = Vec3A::splat(material.specular * 0.08);
-            let metallic_f0 = material.albedo;
-            let f0 = dielectric_f0.lerp(metallic_f0, material.metallic);
-
-            let pdf = 1.0 - clearcoat_prob;
-
-            if pdf < 1e-5 {
-                return BrdfSample::ZERO;
-            }
-
-            let attenuation = fresnel_term(direction.dot(normal).max(0.0), f0) / pdf;
-
-            return BrdfSample {
-                direction,
-                attenuation,
-                pdf,
-            };
-        }
-
-        if rand::random::<f32>() < material.metallic {
+            (-view).reflect(half)
+        } else if dice < p_clearcoat_lobe + p_specular_lobe {
             let half = gtr2_importance_sample(normal, material.roughness);
-            let light = (-view).reflect(half);
+            (-view).reflect(half)
+        } else {
+            random_cosine_direction(normal)
+        };
+        let BrdfEval { f_r, pdf } = self.eval(view, normal, light, material);
 
-            let n_dot_h = normal.dot(half);
-            let n_dot_v = normal.dot(view);
-            let n_dot_l = normal.dot(light);
-            let v_dot_h = view.dot(half);
-            let l_dot_h = light.dot(half);
-
-            let pdf = ggx_pdf_specular(n_dot_h, v_dot_h, material.roughness)
-                * (1.0 - clearcoat_prob)
-                * material.metallic;
-
-            if pdf < 1e-5 {
-                return BrdfSample::ZERO;
-            }
-
-            if n_dot_l <= 0.0 {
-                return BrdfSample::ZERO;
-            }
-
-            let dielectric_f0 = Vec3A::splat(material.specular * 0.08);
-            let metallic_f0 = material.albedo;
-            let f0 = dielectric_f0.lerp(metallic_f0, material.metallic);
-            let attenuation =
-                specular_term(n_dot_h, n_dot_v, n_dot_l, l_dot_h, material.roughness, f0) * n_dot_l
-                    / pdf;
-
-            return BrdfSample {
-                direction: light,
-                attenuation,
-                pdf,
-            };
+        if pdf < 1e-5 {
+            return BrdfSample::ZERO;
         }
 
-        let half = gtr2_importance_sample(normal, material.roughness);
-        let light = (-view).reflect(half);
+        let n_dot_l = normal.dot(light).max(0.0);
+        let attenuation = f_r * n_dot_l / pdf;
 
-        let l_dot_h = light.dot(half);
-
-        let f0 = Vec3A::splat(material.specular * 0.08);
-        let f = fresnel_term(l_dot_h, f0);
-
-        let specular_prob = f.max_element();
-
-        if rand::random::<f32>() < specular_prob {
-            let n_dot_h = normal.dot(half);
-            let n_dot_l = normal.dot(light);
-            let n_dot_v = normal.dot(view);
-            let v_dot_h = view.dot(half);
-
-            let pdf = ggx_pdf_specular(n_dot_h, v_dot_h, material.roughness)
-                * (1.0 - clearcoat_prob)
-                * (1.0 - material.metallic)
-                * specular_prob;
-
-            if pdf < 1e-5 {
-                return BrdfSample::ZERO;
-            }
-
-            if n_dot_l <= 0.0 {
-                return BrdfSample::ZERO;
-            }
-
-            let attenuation =
-                specular_term(n_dot_h, n_dot_v, n_dot_l, l_dot_h, material.roughness, f0) * n_dot_l
-                    / pdf;
-
-            BrdfSample {
-                direction: light,
-                attenuation,
-                pdf,
-            }
-        } else {
-            let light = random_cosine_direction(normal);
-            let half = (view + light).normalize();
-
-            let n_dot_v = normal.dot(view);
-            let n_dot_l = normal.dot(light);
-            let l_dot_h = light.dot(half);
-
-            let pdf = normal.dot(light).max(0.0)
-                * FRAC_1_PI
-                * (1.0 - clearcoat_prob)
-                * (1.0 - material.metallic)
-                * (1.0 - specular_prob);
-
-            if pdf < 1e-5 {
-                return BrdfSample::ZERO;
-            }
-
-            if n_dot_l <= 0.0 {
-                return BrdfSample::ZERO;
-            }
-
-            let attenuation = diffuse_term(
-                n_dot_v,
-                n_dot_l,
-                l_dot_h,
-                material.roughness,
-                material.albedo,
-            ) * n_dot_l
-                / pdf;
-
-            BrdfSample {
-                direction: light,
-                attenuation,
-                pdf,
-            }
+        BrdfSample {
+            direction: light,
+            attenuation,
+            pdf,
         }
     }
 }
@@ -247,7 +115,7 @@ fn distribution_term_specular(n_dot_h: f32, roughness: f32) -> f32 {
     let denom_core = n_dot_h * n_dot_h * (alpha2 - 1.0) + 1.0;
     let denom = std::f32::consts::PI * denom_core * denom_core;
 
-    alpha2 / denom.max(1e-3)
+    alpha2 / denom.max(1e-5)
 }
 
 fn distribution_term_clearcoat(n_dot_h: f32, gloss: f32) -> f32 {
@@ -259,13 +127,13 @@ fn distribution_term_clearcoat(n_dot_h: f32, gloss: f32) -> f32 {
     let alpha2 = alpha * alpha;
 
     let denom_core = n_dot_h * n_dot_h * (alpha2 - 1.0) + 1.0;
-    let c = if (alpha2 - 1.0).abs() < 1e-3 {
+    let c = if (alpha2 - 1.0).abs() < 1e-5 {
         1.0 / std::f32::consts::PI
     } else {
         (alpha2 - 1.0) / (std::f32::consts::PI * alpha2.ln())
     };
 
-    c / denom_core.max(1e-3)
+    c / denom_core.max(1e-5)
 }
 
 fn fresnel_term(l_dot_h: f32, f0: Vec3A) -> Vec3A {
@@ -274,7 +142,7 @@ fn fresnel_term(l_dot_h: f32, f0: Vec3A) -> Vec3A {
 
 fn geometry_term(n_dot_v: f32, n_dot_l: f32, roughness: f32) -> f32 {
     fn g1(n_dot_x: f32, k: f32) -> f32 {
-        n_dot_x / (n_dot_x * (1.0 - k) + k).max(1e-3)
+        n_dot_x / (n_dot_x * (1.0 - k) + k).max(1e-5)
     }
 
     let k = (roughness + 1.0).powf(2.0) / 8.0;
@@ -346,8 +214,9 @@ fn gtr1_importance_sample(normal: Vec3A, gloss: f32) -> Vec3A {
     let alpha = lerp(0.1, 0.001, gloss);
     let alpha2 = alpha * alpha;
 
-    let cos_theta = ((1.0 - r1) / (r1 * (alpha2 - 1.0) + 1.0)).sqrt();
-    let sin_theta = (1.0 - cos_theta * cos_theta).max(0.0).sqrt();
+    let cos_theta_sq = (1.0 - alpha2.powf(1.0 - r1)) / (1.0 - alpha2);
+    let cos_theta = cos_theta_sq.sqrt();
+    let sin_theta = (1.0 - cos_theta_sq).max(0.0).sqrt();
 
     let phi = 2.0 * PI * r2;
     let cos_phi = phi.cos();
