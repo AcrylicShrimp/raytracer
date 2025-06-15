@@ -35,12 +35,12 @@ impl Scene {
         let mut closest_t = t_max;
 
         // Check each object for intersection
-        for (object_index, object) in self.objects.iter().enumerate() {
+        for object in self.objects.iter() {
             if !object.bounding_box().is_intersecting(ray) {
                 continue;
             }
 
-            if let Some(hit_record) = object.intersect(ray, t_min, closest_t, object_index) {
+            if let Some(hit_record) = object.intersect(ray, t_min, closest_t) {
                 closest_t = hit_record.t;
                 closest_hit = Some(hit_record);
             }

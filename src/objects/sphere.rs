@@ -55,13 +55,7 @@ impl Object for Sphere {
         }
     }
 
-    fn intersect(
-        &self,
-        ray: &Ray,
-        t_min: f32,
-        t_max: f32,
-        object_index: usize,
-    ) -> Option<HitRecord> {
+    fn intersect(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
         let oc = ray.origin - self.center;
         // Optimized quadratic formula calculation
         let a = ray.direction.length_squared();
@@ -93,8 +87,7 @@ impl Object for Sphere {
         let outward_normal = (point - self.center).normalize();
 
         // Create hit record with the proper normal orientation
-        let hit_record =
-            HitRecord::new(point, outward_normal, t, ray.direction, object_index, self);
+        let hit_record = HitRecord::new(point, outward_normal, t, ray.direction, self);
 
         Some(hit_record)
     }

@@ -6,13 +6,7 @@ pub trait Object: Send + Sync {
     fn area(&self) -> f32;
     fn sample_point(&self) -> PointOnObject;
     fn bounding_box(&self) -> Aabb;
-    fn intersect(
-        &self,
-        ray: &Ray,
-        t_min: f32,
-        t_max: f32,
-        object_index: usize,
-    ) -> Option<HitRecord>;
+    fn intersect(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord>;
 }
 
 #[derive(Debug, Clone)]

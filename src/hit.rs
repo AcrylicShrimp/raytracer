@@ -7,7 +7,6 @@ pub struct HitRecord<'a> {
     pub normal: Vec3A,    // The surface normal at the intersection point
     pub t: f32,           // The ray parameter (distance)
     pub front_face: bool, // Whether the ray hit the front face
-    pub object_index: usize,
     pub object: &'a dyn Object,
 }
 
@@ -17,7 +16,6 @@ impl<'a> HitRecord<'a> {
         outward_normal: Vec3A,
         t: f32,
         ray_direction: Vec3A,
-        object_index: usize,
         object: &'a dyn Object,
     ) -> Self {
         // Determine if the ray is hitting from outside or inside the object
@@ -35,7 +33,6 @@ impl<'a> HitRecord<'a> {
             normal,
             t,
             front_face,
-            object_index,
             object,
         }
     }
