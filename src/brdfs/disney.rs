@@ -42,7 +42,32 @@ impl Brdf for Disney {
         let clearcoat_term =
             clearcoat_term(n_dot_h, n_dot_v, n_dot_l, l_dot_h, material.clearcoat_gloss);
 
-        todo!("eval is not currently used")
+        let f_r = (1.0 - material.metallic) * diffuse_term + specular_term + clearcoat_term;
+
+        let clearcoat_prob = material.clearcoat / (1.0 + material.clearcoat);
+        let base_prob = 1.0 - clearcoat_prob;
+
+        let pdf_clearcoat = ggx_pdf_clearcoat(n_dot_h, view.dot(half), material.clearcoat_gloss);
+        let weighted_pdf_clearcoat = pdf_clearcoat * clearcoat_prob;
+
+        let pdf_specular = ggx_pdf_specular(n_dot_h, view.dot(half), material.roughness);
+        let pdf_diffuse = n_dot_l.max(0.0) * FRAC_1_PI;
+
+        let weighted_pdf_base = if material.metallic < 1.0 {
+            let f = fresnel_term(l_dot_h, Vec3A::splat(material.specular * 0.08));
+            let specular_prob = f.max_element();
+
+            let pdf_dielectric_specular = pdf_specular * specular_prob;
+            let pdf_dielectric_diffuse = pdf_diffuse * (1.0 - specular_prob);
+
+            (1.0 - material.metallic) * (pdf_dielectric_specular + pdf_dielectric_diffuse)
+        } else {
+            pdf_specular * material.metallic
+        };
+
+        let pdf = weighted_pdf_clearcoat + weighted_pdf_base * base_prob;
+
+        BrdfEval { f_r, pdf }
     }
 
     fn sample(&self, view: Vec3A, normal: Vec3A, material: &Material) -> BrdfSample {
