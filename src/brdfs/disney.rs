@@ -13,12 +13,19 @@ impl Disney {
         let p_clearcoat_lobe = 0.25 * material.clearcoat;
         let p_base_lobe = 1.0 - p_clearcoat_lobe;
 
-        let p_specular_lobe = material.metallic;
-        let p_diffuse_lobe = 1.0 - p_specular_lobe;
+        let metallic_weight = material.metallic;
+        let dielectric_weight = 1.0 - material.metallic;
 
-        // the base lobes are under the clearcoat lobe
-        let p_specular_lobe = p_base_lobe * p_specular_lobe;
-        let p_diffuse_lobe = p_base_lobe * p_diffuse_lobe;
+        let dielectric_specular_weight = material.specular;
+        let dielectric_diffuse_weight = 1.0 - material.specular;
+
+        // specular = metallic specular or dielectric specular
+        let specular_weight = metallic_weight + dielectric_weight * dielectric_specular_weight;
+        // diffuse = **ONLY** dielectric diffuse
+        let diffuse_weight = dielectric_weight * dielectric_diffuse_weight;
+
+        let p_specular_lobe = p_base_lobe * specular_weight;
+        let p_diffuse_lobe = p_base_lobe * diffuse_weight;
 
         (p_clearcoat_lobe, p_specular_lobe, p_diffuse_lobe)
     }
@@ -161,7 +168,7 @@ fn diffuse_term(
     let fdv = 1.0 + (fd90 - 1.0) * (1.0 - n_dot_v).powf(5.0);
     let fdl = 1.0 + (fd90 - 1.0) * (1.0 - n_dot_l).powf(5.0);
 
-    base_color * (fdv * fdl / std::f32::consts::PI).max(0.0)
+    base_color * (fdv * fdl * FRAC_1_PI).max(0.0)
 }
 
 fn specular_term(
@@ -172,17 +179,21 @@ fn specular_term(
     roughness: f32,
     f0: Vec3A,
 ) -> Vec3A {
+    let denom = (4.0 * n_dot_v * n_dot_l).max(1e-5);
+
     distribution_term_specular(n_dot_h, roughness)
         * fresnel_term(l_dot_h, f0)
         * geometry_term(n_dot_v, n_dot_l, roughness)
-        / (4.0 * n_dot_v * n_dot_l)
+        / denom
 }
 
 fn clearcoat_term(n_dot_h: f32, n_dot_v: f32, n_dot_l: f32, l_dot_h: f32, gloss: f32) -> Vec3A {
+    let denom = (4.0 * n_dot_v * n_dot_l).max(1e-5);
+
     distribution_term_clearcoat(n_dot_h, gloss)
         * fresnel_term(l_dot_h, Vec3A::splat(0.04))
         * geometry_term(n_dot_v, n_dot_l, 0.25)
-        / (4.0 * n_dot_v * n_dot_l)
+        / denom
 }
 
 fn gtr2_importance_sample(normal: Vec3A, roughness: f32) -> Vec3A {
