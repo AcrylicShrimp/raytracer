@@ -10,7 +10,7 @@ mod ray;
 mod scene;
 
 use crate::{
-    brdfs::lambertian::LambertianBrdf,
+    brdfs::disney::Disney,
     camera::{Camera, RenderOptions},
     material::Material,
     objects::r#box::Box,
@@ -26,7 +26,7 @@ const MATERIAL_WHITE: Material = Material {
     subsurface: 0.0,
     metallic: 0.0,
     specular: 0.0,
-    specular_tint: Vec3A::ZERO,
+    specular_tint: Vec3A::ONE,
     roughness: 1.0,
     anisotropic: 0.0,
     sheen: 0.0,
@@ -41,7 +41,7 @@ const MATERIAL_RED: Material = Material {
     subsurface: 0.0,
     metallic: 0.0,
     specular: 0.0,
-    specular_tint: Vec3A::ZERO,
+    specular_tint: Vec3A::ONE,
     roughness: 1.0,
     anisotropic: 0.0,
     sheen: 0.0,
@@ -56,7 +56,7 @@ const MATERIAL_GREEN: Material = Material {
     subsurface: 0.0,
     metallic: 0.0,
     specular: 0.0,
-    specular_tint: Vec3A::ZERO,
+    specular_tint: Vec3A::ONE,
     roughness: 1.0,
     anisotropic: 0.0,
     sheen: 0.0,
@@ -71,7 +71,7 @@ const MATERIAL_LIGHT: Material = Material {
     subsurface: 0.0,
     metallic: 0.0,
     specular: 0.0,
-    specular_tint: Vec3A::ZERO,
+    specular_tint: Vec3A::ONE,
     roughness: 1.0,
     anisotropic: 0.0,
     sheen: 0.0,
@@ -86,7 +86,7 @@ const MATERIAL_BOX_1: Material = Material {
     subsurface: 0.0,
     metallic: 0.9,
     specular: 0.0,
-    specular_tint: Vec3A::ZERO,
+    specular_tint: Vec3A::ONE,
     roughness: 0.1,
     anisotropic: 0.0,
     sheen: 0.0,
@@ -101,7 +101,7 @@ const MATERIAL_BOX_2: Material = Material {
     subsurface: 0.0,
     metallic: 0.0,
     specular: 1.0,
-    specular_tint: Vec3A::ZERO,
+    specular_tint: Vec3A::ONE,
     roughness: 0.05,
     anisotropic: 0.0,
     sheen: 0.0,
@@ -191,7 +191,7 @@ fn main() {
     );
     let frame_buffer = camera.render(
         &scene,
-        &LambertianBrdf,
+        &Disney,
         &RenderOptions {
             screen_width,
             screen_height,
