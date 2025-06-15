@@ -147,18 +147,26 @@ fn trace_ray<'a>(
     let hit = match hit {
         Some(hit) if hit.front_face => hit,
         _ => {
+            // the ray did not hit any valid surface. sample environment and return the emission.
+            // TODO: add environment sampling later
             return Vec3A::ZERO;
         }
     };
-    let is_delta_surface = brdf.is_delta_surface(hit.object.material());
 
     if hit.object.material().is_emissive {
+        // the ray hit an emissive surface; return the emission.
+        // ideal light sources do not reflect light, so we can skip the rest of the computation.
         return hit.object.material().emission;
     }
 
+    // is the surface a delta surface(perfect mirror)?
+    let is_delta_surface = brdf.is_delta_surface(hit.object.material());
     let direct_term = if is_delta_surface {
+        // direct term is zero for delta surfaces.
+        // this is because there is no chance of the direct light being reflected back to the ray shooter.
         Vec3A::ZERO
     } else {
+        // compute the contribution of the direct light source.
         compute_nee_contribution(&hit, scene, brdf, -ray.direction)
     };
 
@@ -173,9 +181,11 @@ fn trace_ray<'a>(
     let next_hit = scene.hit(&next_ray, 1e-3, f32::INFINITY);
     let indirect_term = match next_hit {
         Some(next_hit) if next_hit.object.material().is_emissive && is_delta_surface => {
+            // indirect term is coming from a direct light source, and MIS is not needed (because the surface is perfect mirror)
             next_hit.object.material().emission * brdf_sample.attenuation
         }
         Some(next_hit) if next_hit.object.material().is_emissive && !is_delta_surface => {
+            // indirect term is coming from a direct light source, and MIS is needed
             let pdf_brdf = brdf_sample.pdf;
             let r_squared = (next_hit.point - hit.point).length_squared();
             let cos_theta_l = next_hit.normal.dot(-next_ray.direction).max(0.0);
@@ -192,9 +202,13 @@ fn trace_ray<'a>(
             }
         }
         Some(next_hit) => {
+            // indirect term is coming from a non-direct light source
             trace_ray(&next_ray, scene, brdf, depth - 1, Some(next_hit)) * brdf_sample.attenuation
         }
-        None => Vec3A::ZERO,
+        None => {
+            // there is no next hit; ignore it
+            Vec3A::ZERO
+        }
     };
 
     // L_o * attenuation
