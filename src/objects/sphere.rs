@@ -25,7 +25,7 @@ impl Object for Sphere {
     }
 
     fn sample_point(&self) -> PointOnObject {
-        if self.radius < 1e-3 {
+        if self.radius < 1e-5 {
             return PointOnObject {
                 point: self.center,
                 normal: Vec3A::Y,

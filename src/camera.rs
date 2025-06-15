@@ -143,7 +143,7 @@ fn trace_ray<'a>(
         return Vec3A::ZERO;
     }
 
-    let hit = hit.or_else(|| scene.hit(ray, 1e-3, f32::INFINITY));
+    let hit = hit.or_else(|| scene.hit(ray, 1e-5, f32::INFINITY));
     let hit = match hit {
         Some(hit) if hit.front_face => hit,
         _ => {
@@ -177,8 +177,8 @@ fn trace_ray<'a>(
         return direct_term;
     }
 
-    let next_ray = Ray::new(hit.point + hit.normal * 1e-3, brdf_sample.direction);
-    let next_hit = scene.hit(&next_ray, 1e-3, f32::INFINITY);
+    let next_ray = Ray::new(hit.point + hit.normal * 1e-5, brdf_sample.direction);
+    let next_hit = scene.hit(&next_ray, 1e-5, f32::INFINITY);
     let indirect_term = match next_hit {
         Some(next_hit) if next_hit.object.material().is_emissive && is_delta_surface => {
             // indirect term is coming from a direct light source, and MIS is not needed (because the surface is perfect mirror)
@@ -249,7 +249,7 @@ fn compute_nee_contribution(
     let light_point = light_object.sample_point();
     let diff = light_point.point - hit.point;
 
-    if diff.length_squared() < 1e-3 {
+    if diff.length_squared() < 1e-5 {
         // light is too close; ignore it, treating the light as if it is behind the surface
         return Vec3A::ZERO;
     }
@@ -266,8 +266,8 @@ fn compute_nee_contribution(
         return Vec3A::ZERO;
     }
 
-    let shadow_ray = Ray::new(hit.point + hit.normal * 1e-3, light_direction);
-    let is_visible = scene.hit(&shadow_ray, 1e-3, r - 1e-3).is_none();
+    let shadow_ray = Ray::new(hit.point + hit.normal * 1e-5, light_direction);
+    let is_visible = scene.hit(&shadow_ray, 1e-5, r - 1e-5).is_none();
 
     if !is_visible {
         // light is not visible; ignore it
