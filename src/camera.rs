@@ -267,7 +267,7 @@ fn compute_nee_contribution(
     }
 
     let shadow_ray = Ray::new(hit.point + hit.normal * 1e-5, light_direction);
-    let is_visible = scene.hit(&shadow_ray, 1e-5, r - 1e-5).is_none();
+    let is_visible = scene.hit(&shadow_ray, 1e-5, r - 2e-5).is_none();
 
     if !is_visible {
         // light is not visible; ignore it
