@@ -37,9 +37,6 @@ impl Brdf for Disney {
     }
 
     fn eval(&self, view: Vec3A, normal: Vec3A, light: Vec3A, material: &Material) -> BrdfEval {
-        let (p_clearcoat_lobe, p_specular_lobe, p_diffuse_lobe) =
-            Self::compute_lobe_weights(material);
-
         let half = (view + light).normalize();
 
         let n_dot_h = normal.dot(half);
@@ -72,7 +69,12 @@ impl Brdf for Disney {
             material.albedo,
         );
 
-        let f_r = (1.0 - material.metallic) * diffuse_term + specular_term + clearcoat_term;
+        let (p_clearcoat_lobe, p_specular_lobe, p_diffuse_lobe) =
+            Self::compute_lobe_weights(material);
+
+        let diffuse_weight = (1.0 - material.metallic) * (1.0 - material.specular);
+        let f_r =
+            clearcoat_term + (1.0 - diffuse_weight) * specular_term + diffuse_weight * diffuse_term;
         let pdf = p_clearcoat_lobe * pdf_clearcoat
             + p_specular_lobe * pdf_specular
             + p_diffuse_lobe * pdf_diffuse;
