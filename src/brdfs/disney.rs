@@ -9,7 +9,7 @@ pub struct Disney;
 
 impl Brdf for Disney {
     fn is_delta_surface(&self, material: &Material) -> bool {
-        (material.specular - 1.0).abs() < 1e-3
+        material.roughness < 1e-3
     }
 
     fn eval(&self, view: Vec3A, normal: Vec3A, light: Vec3A, material: &Material) -> BrdfEval {
