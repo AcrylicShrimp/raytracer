@@ -90,6 +90,7 @@ impl Object for Box {
 
     fn bounding_box(&self) -> Aabb {
         let half_size = self.size * 0.5;
+
         let rot_mat = Mat3A::from_quat(self.rotation);
         let abs_rot_mat = Mat3A::from_cols(
             rot_mat.x_axis.abs(),

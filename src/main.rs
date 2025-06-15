@@ -13,10 +13,10 @@ use crate::{
     brdfs::disney::Disney,
     camera::{Camera, RenderOptions},
     material::Material,
-    objects::r#box::Box,
+    objects::{r#box::Box, plain::Plain},
     scene::Scene,
 };
-use glam::{Quat, Vec3A};
+use glam::{Quat, Vec2, Vec3A};
 use std::{fs::File, io::BufWriter, path::Path};
 
 const MATERIAL_WHITE: Material = Material {
@@ -84,7 +84,7 @@ const MATERIAL_BOX_1: Material = Material {
     emission: Vec3A::ZERO,
     albedo: Vec3A::new(1.0, 1.0, 1.0),
     subsurface: 0.0,
-    metallic: 0.9,
+    metallic: 0.8,
     specular: 0.0,
     specular_tint: Vec3A::ONE,
     roughness: 0.1,
@@ -100,9 +100,9 @@ const MATERIAL_BOX_2: Material = Material {
     albedo: Vec3A::new(1.0, 1.0, 1.0),
     subsurface: 0.0,
     metallic: 0.0,
-    specular: 0.5,
+    specular: 0.2,
     specular_tint: Vec3A::ONE,
-    roughness: 0.8,
+    roughness: 0.1,
     anisotropic: 0.0,
     sheen: 0.0,
     sheen_tint: Vec3A::ZERO,
@@ -113,7 +113,6 @@ const BOX_SIZE: f32 = 2.5;
 const BOX_THICKNESS: f32 = 0.1;
 const BOX_OFFSET: f32 = (BOX_SIZE + BOX_THICKNESS) * 0.5;
 const LIGHT_SIZE: f32 = 0.5;
-const LIGHT_THICKNESS: f32 = 0.01;
 
 fn main() {
     let path = Path::new(r"image.png");
@@ -158,14 +157,10 @@ fn main() {
     });
 
     // Light
-    scene.add_object(Box {
-        center: Vec3A::new(
-            0.0,
-            BOX_OFFSET - BOX_THICKNESS * 0.5 - LIGHT_THICKNESS * 0.5,
-            0.0,
-        ),
-        size: Vec3A::new(LIGHT_SIZE, LIGHT_THICKNESS, LIGHT_SIZE),
-        rotation: Quat::IDENTITY,
+    scene.add_object(Plain {
+        center: Vec3A::new(0.0, BOX_OFFSET - BOX_THICKNESS * 0.5 - 1e-3, 0.0),
+        normal: Vec3A::NEG_Y,
+        size: Vec2::new(LIGHT_SIZE, LIGHT_SIZE),
         material: MATERIAL_LIGHT.clone(),
     });
 
