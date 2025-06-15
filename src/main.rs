@@ -13,7 +13,7 @@ use crate::{
     brdfs::disney::Disney,
     camera::{Camera, RenderOptions},
     material::Material,
-    objects::{r#box::Box, sphere::Sphere},
+    objects::r#box::Box,
     scene::Scene,
 };
 use glam::{Quat, Vec3A};
@@ -100,9 +100,9 @@ const MATERIAL_BOX_2: Material = Material {
     albedo: Vec3A::new(1.0, 1.0, 1.0),
     subsurface: 0.0,
     metallic: 0.0,
-    specular: 1.0,
+    specular: 0.5,
     specular_tint: Vec3A::ONE,
-    roughness: 0.05,
+    roughness: 0.8,
     anisotropic: 0.0,
     sheen: 0.0,
     sheen_tint: Vec3A::ZERO,
@@ -170,38 +170,17 @@ fn main() {
     });
 
     // Two Boxes
-    // scene.add_object(Box {
-    //     center: Vec3A::new(-0.35, -BOX_OFFSET + 0.8, -0.35),
-    //     size: Vec3A::new(0.8, 1.6, 0.8),
-    //     rotation: Quat::from_rotation_y(20.0f32.to_radians()),
-    //     material: MATERIAL_BOX_1.clone(),
-    // });
-    // scene.add_object(Box {
-    //     center: Vec3A::new(0.45, -BOX_OFFSET + 0.35, 0.35),
-    //     size: Vec3A::new(0.7, 0.7, 0.7),
-    //     rotation: Quat::from_rotation_y(-20.0f32.to_radians()),
-    //     material: MATERIAL_BOX_2.clone(),
-    // });
-
-    // A sphere to test material properties
-    scene.add_object(Sphere {
-        center: Vec3A::new(-0.45, -BOX_OFFSET + 0.4, 0.5),
-        radius: 0.4,
-        material: Material {
-            is_emissive: false,
-            emission: Vec3A::ZERO,
-            albedo: Vec3A::new(1.0, 1.0, 1.0),
-            subsurface: 0.0,
-            metallic: 0.0,
-            specular: 0.0,
-            specular_tint: Vec3A::ONE,
-            roughness: 1.0,
-            anisotropic: 0.0,
-            sheen: 0.0,
-            sheen_tint: Vec3A::ZERO,
-            clearcoat: 0.0,
-            clearcoat_gloss: 0.0,
-        },
+    scene.add_object(Box {
+        center: Vec3A::new(-0.35, -BOX_OFFSET + 0.8, -0.35),
+        size: Vec3A::new(0.8, 1.6, 0.8),
+        rotation: Quat::from_rotation_y(20.0f32.to_radians()),
+        material: MATERIAL_BOX_1.clone(),
+    });
+    scene.add_object(Box {
+        center: Vec3A::new(0.45, -BOX_OFFSET + 0.35, 0.35),
+        size: Vec3A::new(0.7, 0.7, 0.7),
+        rotation: Quat::from_rotation_y(-20.0f32.to_radians()),
+        material: MATERIAL_BOX_2.clone(),
     });
 
     let camera = Camera::look_at(
@@ -217,7 +196,7 @@ fn main() {
             screen_width,
             screen_height,
             sample_per_pixel: 1024,
-            max_ray_bounces: 1,
+            max_ray_bounces: 8,
             exposure: 1.0,
             gamma: 2.2,
         },
