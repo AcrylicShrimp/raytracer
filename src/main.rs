@@ -31,8 +31,8 @@ const MATERIAL_WHITE: Material = Material {
     anisotropic: 0.0,
     sheen: 0.0,
     sheen_tint: Vec3A::ZERO,
-    clearcoat: 0.0,
-    clearcoat_gloss: 0.0,
+    clearcoat: 1.0,
+    clearcoat_gloss: 0.95,
 };
 const MATERIAL_RED: Material = Material {
     is_emissive: false,
@@ -47,7 +47,7 @@ const MATERIAL_RED: Material = Material {
     sheen: 0.0,
     sheen_tint: Vec3A::ZERO,
     clearcoat: 1.0,
-    clearcoat_gloss: 1.0,
+    clearcoat_gloss: 0.95,
 };
 const MATERIAL_GREEN: Material = Material {
     is_emissive: false,
@@ -62,7 +62,7 @@ const MATERIAL_GREEN: Material = Material {
     sheen: 0.0,
     sheen_tint: Vec3A::ZERO,
     clearcoat: 1.0,
-    clearcoat_gloss: 1.0,
+    clearcoat_gloss: 0.95,
 };
 const MATERIAL_LIGHT: Material = Material {
     is_emissive: true,
