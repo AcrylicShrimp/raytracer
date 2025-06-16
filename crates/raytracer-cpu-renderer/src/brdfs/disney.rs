@@ -1,13 +1,14 @@
 use crate::{
-    brdf::{Brdf, BrdfEval, BrdfSample, create_orthonormal_basis, lerp, random_cosine_direction},
-    material::Material,
+    brdf::{Brdf, BrdfEval, BrdfSample},
+    brdfs::{create_orthonormal_basis, lerp, random_cosine_direction},
 };
 use glam::Vec3A;
+use raytracer_core::material::Material;
 use std::f32::consts::{FRAC_1_PI, PI};
 
-pub struct Disney;
+pub struct DisneyBrdf;
 
-impl Disney {
+impl DisneyBrdf {
     fn compute_lobe_weights(material: &Material) -> (f32, f32, f32) {
         // the clearcoat lobe has maximum 25% chance of being sampled
         let p_clearcoat_lobe = 0.25 * material.clearcoat;
@@ -31,7 +32,7 @@ impl Disney {
     }
 }
 
-impl Brdf for Disney {
+impl Brdf for DisneyBrdf {
     fn is_delta_surface(&self, material: &Material) -> bool {
         material.roughness < 1e-5
     }

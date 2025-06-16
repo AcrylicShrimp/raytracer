@@ -1,59 +1,41 @@
-use crate::{
-    brdf::{Brdf, BrdfEval},
-    hit::HitRecord,
-    ray::Ray,
-    scene::Scene,
-};
+use crate::brdf::{Brdf, BrdfEval};
 use glam::Vec3A;
-use rand::seq::IndexedRandom;
+use rand::prelude::*;
 use rayon::prelude::*;
+use raytracer_core::{camera::Camera, hit_record::HitRecord, ray::Ray, scene::Scene};
 
 #[derive(Debug, Clone)]
-pub struct Camera {
-    pub position: Vec3A,
-    pub direction: Vec3A,
-    pub up: Vec3A,
-    pub fov: f32,
+pub struct CpuRendererConfig {
+    pub screen_width: u32,
+    pub screen_height: u32,
+    pub sample_per_pixel: u32,
+    pub max_ray_bounces: u32,
+    pub exposure: f32,
+    pub gamma: f32,
 }
 
-impl Camera {
-    pub fn look_at(position: Vec3A, target: Vec3A, up: Vec3A, fov: f32) -> Self {
-        let direction = (target - position).normalize();
-        let right = direction.cross(up).normalize();
-        let up = right.cross(direction).normalize();
+#[derive(Debug, Clone)]
+pub struct CpuRenderer {
+    config: CpuRendererConfig,
+}
 
-        Self {
-            position,
-            direction,
-            up,
-            fov,
-        }
+impl CpuRenderer {
+    pub fn new(config: CpuRendererConfig) -> Self {
+        Self { config }
     }
 
-    pub fn cast_ray(&self, aspect_ratio: f32, pixel_x: f32, pixel_y: f32) -> Ray {
-        let ndc_x = pixel_x * 2.0 - 1.0;
-        let ndc_y = 1.0 - pixel_y * 2.0;
-
-        let tan_fov_half = (self.fov.to_radians() / 2.0).tan();
-        let plane_x = ndc_x * aspect_ratio * tan_fov_half;
-        let plane_y = ndc_y * tan_fov_half;
-
-        let right = self.direction.cross(self.up).normalize();
-        let up = right.cross(self.direction).normalize();
-
-        let direction = (self.direction + right * plane_x + up * plane_y).normalize();
-
-        Ray::new(self.position, direction)
+    pub fn config(&self) -> &CpuRendererConfig {
+        &self.config
     }
 
-    pub fn render(&self, scene: &Scene, brdf: &impl Brdf, options: &RenderOptions) -> Vec<u8> {
-        let screen_width = options.screen_width;
-        let screen_height = options.screen_height;
+    pub fn render(&self, scene: &Scene, camera: &Camera, brdf: &dyn Brdf) -> Vec<u8> {
+        let screen_width = self.config.screen_width;
+        let screen_height = self.config.screen_height;
         let aspect_ratio = screen_width as f32 / screen_height as f32;
-        let sample_per_pixel = options.sample_per_pixel;
-        let max_ray_bounces = options.max_ray_bounces;
-        let exposure = options.exposure;
-        let gamma = options.gamma;
+        let sample_per_pixel = self.config.sample_per_pixel;
+        let max_ray_bounces = self.config.max_ray_bounces;
+        let exposure = self.config.exposure;
+        let gamma = self.config.gamma;
 
         let mut buffer = vec![Vec3A::ZERO; (screen_width * screen_height) as usize];
 
@@ -69,7 +51,7 @@ impl Camera {
                 for _ in 0..sample_per_pixel {
                     let pixel_x = (x as f32 + rand::random::<f32>()) / screen_width as f32;
                     let pixel_y = (y as f32 + rand::random::<f32>()) / screen_height as f32;
-                    let ray = self.cast_ray(aspect_ratio, pixel_x, pixel_y);
+                    let ray = cast_ray(camera, aspect_ratio, pixel_x, pixel_y);
                     let energy = trace_ray(ray, scene, brdf, max_ray_bounces);
                     color += energy;
                 }
@@ -97,19 +79,26 @@ impl Camera {
     }
 }
 
+fn cast_ray(camera: &Camera, aspect_ratio: f32, pixel_x: f32, pixel_y: f32) -> Ray {
+    let ndc_x = pixel_x * 2.0 - 1.0;
+    let ndc_y = 1.0 - pixel_y * 2.0;
+
+    let tan_fov_half = (camera.fov.to_radians() / 2.0).tan();
+    let plane_x = ndc_x * aspect_ratio * tan_fov_half;
+    let plane_y = ndc_y * tan_fov_half;
+
+    let right = camera.direction.cross(camera.up).normalize();
+    let up = right.cross(camera.direction).normalize();
+
+    let direction = (camera.direction + right * plane_x + up * plane_y).normalize();
+
+    Ray::new(camera.position, direction)
+}
+
 fn map_hdr_to_sdr(color: Vec3A, exposure: f32, gamma: f32) -> Vec3A {
     let color = color * exposure;
     let color = color / (color + 1f32);
     color.powf(1f32 / gamma)
-}
-
-pub struct RenderOptions {
-    pub screen_width: u32,
-    pub screen_height: u32,
-    pub sample_per_pixel: u32,
-    pub max_ray_bounces: u32,
-    pub exposure: f32,
-    pub gamma: f32,
 }
 
 /// Solves the rendering equation for a given ray, using the BRDF:
@@ -132,7 +121,7 @@ pub struct RenderOptions {
 /// Note that the BRDF is responsible for computing `attenuation`, which represents:
 ///
 /// `attenuation = f_r * cos_theta / pdf`
-fn trace_ray<'a>(mut ray: Ray, scene: &'a Scene, brdf: &impl Brdf, depth: u32) -> Vec3A {
+fn trace_ray<'a>(mut ray: Ray, scene: &'a Scene, brdf: &dyn Brdf, depth: u32) -> Vec3A {
     let mut result = Vec3A::ZERO;
     let mut attenuation = Vec3A::ONE;
     let mut hit: Option<HitRecord<'a>> = scene.hit(&ray, 1e-5, f32::INFINITY);
@@ -240,12 +229,7 @@ fn trace_ray<'a>(mut ray: Ray, scene: &'a Scene, brdf: &impl Brdf, depth: u32) -
     result
 }
 
-fn compute_nee_contribution(
-    hit: &HitRecord,
-    scene: &Scene,
-    brdf: &impl Brdf,
-    view: Vec3A,
-) -> Vec3A {
+fn compute_nee_contribution(hit: &HitRecord, scene: &Scene, brdf: &dyn Brdf, view: Vec3A) -> Vec3A {
     let total_light_objects: Vec<_> = scene
         .objects()
         .iter()

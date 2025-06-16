@@ -1,6 +1,9 @@
-use crate::brdf::{Brdf, BrdfEval, BrdfSample, random_cosine_direction};
-use crate::material::Material;
+use crate::{
+    brdf::{Brdf, BrdfEval, BrdfSample},
+    brdfs::random_cosine_direction,
+};
 use glam::Vec3A;
+use raytracer_core::material::Material;
 use std::f32::consts::FRAC_1_PI;
 
 #[derive(Debug, Clone, Copy)]

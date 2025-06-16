@@ -1,0 +1,9 @@
+[package]
+name = "raytracer-primitives"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+glam.workspace = true
+rand.workspace = true
+raytracer-core.workspace = true

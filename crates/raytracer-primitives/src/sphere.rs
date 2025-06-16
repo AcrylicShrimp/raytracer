@@ -1,11 +1,11 @@
-use crate::{
+use glam::Vec3A;
+use raytracer_core::{
     aabb::Aabb,
-    hit::HitRecord,
+    hit_record::HitRecord,
     material::Material,
     object::{Object, PointOnObject},
     ray::Ray,
 };
-use glam::Vec3A;
 use std::f32::consts::PI;
 
 #[derive(Debug, Clone)]

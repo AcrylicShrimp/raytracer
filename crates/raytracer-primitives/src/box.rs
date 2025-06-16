@@ -1,11 +1,11 @@
-use crate::{
+use glam::{Mat3A, Quat, Vec3A};
+use raytracer_core::{
     aabb::Aabb,
-    hit::HitRecord,
+    hit_record::HitRecord,
     material::Material,
     object::{Object, PointOnObject},
     ray::Ray,
 };
-use glam::{Mat3A, Quat, Vec3A};
 
 #[derive(Debug, Clone)]
 pub struct Box {
