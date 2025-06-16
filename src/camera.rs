@@ -70,7 +70,7 @@ impl Camera {
                     let pixel_x = (x as f32 + rand::random::<f32>()) / screen_width as f32;
                     let pixel_y = (y as f32 + rand::random::<f32>()) / screen_height as f32;
                     let ray = self.cast_ray(aspect_ratio, pixel_x, pixel_y);
-                    let energy = trace_ray(&ray, scene, brdf, max_ray_bounces, None);
+                    let energy = trace_ray(ray, scene, brdf, max_ray_bounces);
                     color += energy;
                 }
 
@@ -132,87 +132,112 @@ pub struct RenderOptions {
 /// Note that the BRDF is responsible for computing `attenuation`, which represents:
 ///
 /// `attenuation = f_r * cos_theta / pdf`
-fn trace_ray<'a>(
-    ray: &Ray,
-    scene: &'a Scene,
-    brdf: &impl Brdf,
-    depth: u32,
-    hit: Option<HitRecord<'a>>,
-) -> Vec3A {
-    if depth == 0 {
-        return Vec3A::ZERO;
-    }
+fn trace_ray<'a>(mut ray: Ray, scene: &'a Scene, brdf: &impl Brdf, depth: u32) -> Vec3A {
+    let mut result = Vec3A::ZERO;
+    let mut attenuation = Vec3A::ONE;
+    let mut hit: Option<HitRecord<'a>> = scene.hit(&ray, 1e-5, f32::INFINITY);
 
-    let hit = hit.or_else(|| scene.hit(ray, 1e-5, f32::INFINITY));
-    let hit = match hit {
-        Some(hit) if hit.front_face => hit,
-        _ => {
-            // the ray did not hit any valid surface. sample environment and return the emission.
-            // TODO: add environment sampling later
-            return Vec3A::ZERO;
-        }
-    };
-
-    if hit.object.material().is_emissive {
-        // the ray hit an emissive surface; return the emission.
-        // ideal light sources do not reflect light, so we can skip the rest of the computation.
-        return hit.object.material().emission;
-    }
-
-    // is the surface a delta surface(perfect mirror)?
-    let is_delta_surface = brdf.is_delta_surface(hit.object.material());
-    let direct_term = if is_delta_surface {
-        // direct term is zero for delta surfaces.
-        // this is because there is no chance of the direct light being reflected back to the ray shooter.
-        Vec3A::ZERO
-    } else {
-        // compute the contribution of the direct light source.
-        compute_nee_contribution(&hit, scene, brdf, -ray.direction)
-    };
-
-    let brdf_sample = brdf.sample(-ray.direction, hit.normal, hit.object.material());
-
-    if brdf_sample.attenuation.length_squared() < 1e-5 || brdf_sample.pdf < 1e-5 {
-        // indirect term is too small; ignore it
-        return direct_term;
-    }
-
-    let next_ray = Ray::new(hit.point + hit.normal * 1e-5, brdf_sample.direction);
-    let next_hit = scene.hit(&next_ray, 1e-5, f32::INFINITY);
-    let indirect_term = match next_hit {
-        Some(next_hit) if next_hit.object.material().is_emissive && is_delta_surface => {
-            // indirect term is coming from a direct light source, and MIS is not needed (because the surface is perfect mirror)
-            next_hit.object.material().emission * brdf_sample.attenuation
-        }
-        Some(next_hit) if next_hit.object.material().is_emissive && !is_delta_surface => {
-            // indirect term is coming from a direct light source, and MIS is needed
-            let pdf_brdf = brdf_sample.pdf;
-            let r_squared = (next_hit.point - hit.point).length_squared();
-            let cos_theta_l = next_hit.normal.dot(-next_ray.direction).max(0.0);
-
-            if cos_theta_l < 1e-5 {
-                Vec3A::ZERO
-            } else {
-                let light_area = next_hit.object.area();
-                let n_light = scene.light_count() as f32;
-                let pdf_light = (r_squared / (cos_theta_l * light_area)) / n_light;
-
-                let mis_weight_brdf = pdf_brdf / (pdf_light + pdf_brdf);
-                next_hit.object.material().emission * brdf_sample.attenuation * mis_weight_brdf
+    for _ in 0..depth {
+        let current_hit = match hit.take() {
+            Some(hit) if hit.front_face => hit,
+            _ => {
+                // the ray did not hit any valid surface. sample environment and return the emission.
+                // TODO: add environment sampling later
+                result += attenuation * Vec3A::ZERO;
+                break;
             }
-        }
-        Some(next_hit) => {
-            // indirect term is coming from a non-direct light source
-            trace_ray(&next_ray, scene, brdf, depth - 1, Some(next_hit)) * brdf_sample.attenuation
-        }
-        None => {
-            // there is no next hit; ignore it
-            Vec3A::ZERO
-        }
-    };
+        };
 
-    // L_o * attenuation
-    direct_term + indirect_term
+        if current_hit.object.material().is_emissive {
+            // the ray hit an emissive surface; return the emission.
+            // ideal light sources do not reflect light, so we can skip the rest of the computation.
+            result += attenuation * current_hit.object.material().emission;
+            break;
+        }
+
+        // is the surface a delta surface(perfect mirror)?
+        let is_delta_surface = brdf.is_delta_surface(current_hit.object.material());
+        let direct_term = if is_delta_surface {
+            // direct term is zero for delta surfaces.
+            // this is because there is no chance of the direct light being reflected back to the ray shooter.
+            Vec3A::ZERO
+        } else {
+            // compute the contribution of the direct light source.
+            compute_nee_contribution(&current_hit, scene, brdf, -ray.direction)
+        };
+
+        result += attenuation * direct_term;
+
+        let brdf_sample = brdf.sample(
+            -ray.direction,
+            current_hit.normal,
+            current_hit.object.material(),
+        );
+
+        if brdf_sample.attenuation.length_squared() < 1e-5 || brdf_sample.pdf < 1e-5 {
+            // indirect term is too small; ignore it
+            break;
+        }
+
+        ray = Ray::new(
+            current_hit.point + current_hit.normal * 1e-5,
+            brdf_sample.direction,
+        );
+        hit = scene.hit(&ray, 1e-5, f32::INFINITY);
+
+        let should_trace_next = match &hit {
+            Some(next_hit)
+                if next_hit.front_face
+                    && next_hit.object.material().is_emissive
+                    && is_delta_surface =>
+            {
+                // indirect term is coming from a direct light source, and MIS is not needed (because the surface is perfect mirror)
+                let indirect_term = next_hit.object.material().emission * brdf_sample.attenuation;
+                result += attenuation * indirect_term;
+                false
+            }
+            Some(next_hit)
+                if next_hit.front_face
+                    && next_hit.object.material().is_emissive
+                    && !is_delta_surface =>
+            {
+                // indirect term is coming from a direct light source, and MIS is needed
+                let pdf_brdf = brdf_sample.pdf;
+                let r_squared = (next_hit.point - current_hit.point).length_squared();
+                let cos_theta_l = next_hit.normal.dot(-ray.direction).max(0.0);
+
+                let indirect_term = if cos_theta_l < 1e-5 {
+                    Vec3A::ZERO
+                } else {
+                    let light_area = next_hit.object.area();
+                    let n_light = scene.light_count() as f32;
+                    let pdf_light = (r_squared / (cos_theta_l * light_area)) / n_light;
+
+                    let mis_weight_brdf = pdf_brdf / (pdf_light + pdf_brdf);
+                    next_hit.object.material().emission * brdf_sample.attenuation * mis_weight_brdf
+                };
+
+                result += attenuation * indirect_term;
+                false
+            }
+            Some(next_hit) if next_hit.front_face => {
+                // indirect term is coming from a non-direct light source
+                true
+            }
+            _ => {
+                // there is no next hit; ignore it
+                false
+            }
+        };
+
+        if !should_trace_next {
+            break;
+        }
+
+        attenuation *= brdf_sample.attenuation;
+    }
+
+    result
 }
 
 fn compute_nee_contribution(
